@@ -82,6 +82,15 @@ void md5Init(MD5Context *ctx){
  * and save the result in the buffer. Also updates the overall size.
  */
 void md5Update(MD5Context *ctx, uint8_t *input_buffer, size_t input_len){
+//
+//    for (int i = 0; i < input_len; ++i) {
+//        if(input_buffer[i] == 53){
+//            1;
+//        }
+//       printf("%d ", input_buffer[i]);
+//    }
+//    printf(" | ");
+
     uint32_t input[16];
     unsigned int offset = ctx->size % 64;
     ctx->size += (uint64_t)input_len;
