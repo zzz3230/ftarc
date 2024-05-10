@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "stdbool.h"
 #include "compression_algorithms/huffman.h"
-#include "utilities/collections.h"
+#include "utilities/ustring.h"
 
 enum e_work_stage{
     WORK_NONE = 0,

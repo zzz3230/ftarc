@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 void notnull_free(void* ptr);
 int int_min(int a, int b);
@@ -17,5 +19,10 @@ void pretty_bytes(char* buf, int64_t bytes);
 typedef unsigned char uchar;
 
 char* get_file_name_from_path(char* path);
+int is_digits(const char* str);
+
+int is_file_exists(char* path);
+void sleep_ms(int milliseconds);
+int is_directory_exists(const char *path);
 
 #endif

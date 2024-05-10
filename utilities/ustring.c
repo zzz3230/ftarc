@@ -30,3 +30,24 @@ Str str_copy(Str source){
     strcpy(s.value, source.value);
     return s;
 }
+
+Str str_concat_path(Str path1, Str path2){
+    if(path1.value[path1.length - 1] == '/' || path1.value[path1.length - 1] == '\\'){
+        return str_concat(path1, path2);
+    }
+    Str norm_path1 = str_concat(path1, str("/"));
+    Str res_path = str_concat(norm_path1, path2);
+    str_free(norm_path1);
+    return res_path;
+}
+
+int str_equals(Str a, Str b){
+    if(a.length == b.length){
+        return strcmp(a.value, b.value) == 0;
+    }
+    return 0;
+}
+
+void str_free(Str s){
+    free(s.value);
+}

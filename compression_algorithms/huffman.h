@@ -52,6 +52,6 @@ void huffman_encode_symbols(
         int* stop_reason
 );
 void huffman_load_codes(HuffmanCoder* coder, FILE* stream);
-uint64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream);
+int64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream);
 void huffman_clear(HuffmanCoder* coder);
 #endif

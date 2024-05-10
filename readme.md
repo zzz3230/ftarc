@@ -3,15 +3,18 @@
 Based on Huffman algorithm.
 Основан на алгоритме Хаффмана.
 # Interface
-```$ ftarc.exe -[axdltfn] archive[.f2arc] file_1 file_2 ...```
-```a``` - поместить файл(ы) в архив;
-- ```$ ftarc.exe -a arc file_1 path/to/file/file_2```
+```$ ftarc.exe -[axdltfnh] archive[.f2arc] [/path/to/] file_1 file_2 ...```
+- ```a``` - поместить файл(ы) в архив;
+
+   ```$ ftarc.exe -a arc file_1 path/to/file/file_2```
 
 ```x``` - извлечь файл(ы) из архива;
 - ```$ ftarc.exe -x arc``` - Extract all files
-- ```$ ftarc.exe -x arc -f file1 "file 2.txt"```
-  ```$ ftarc.exe -xf arc file1 "file 2.txt"``` - Extract files with specified names
+- ```$ ftarc.exe arc -xf / file1 "file 2.txt"```
+
+  ```$ ftarc.exe -xf arc C:\myfolder\ file1 "file 2.txt"``` - Extract files with specified names
 - ```$ ftarc.exe -x arc -n 0 2 4```
+
   ```$ ftarc.exe -xn arc 0 2 4``` - Extract files with id 0, 2, 4
 
 ```d``` - удалить файл(ы) из архива;

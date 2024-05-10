@@ -113,7 +113,7 @@ void huffman_clear(HuffmanCoder* coder){
 
 void huffman_handle_file(HuffmanCoder* coder, FILE* file){
     fseeko64(file, 0L, SEEK_END);
-    int64_t file_size = ftell(file);
+    int64_t file_size = ftello64(file);
     rewind(file);
 
     coder->read_progress = 0;
@@ -150,6 +150,7 @@ void huffman_build_codes(HuffmanCoder* coder){
 int read_bit(FILE* stream, uchar* buffer, int* bit_index){
     if(*bit_index >= 8){
         fread(buffer, sizeof(char), 1, stream);
+        //printf("%d ", *buffer);
         *bit_index = 0;
     }
     //printf("%d ", (*buffer & (1 << (*bit_index))) != 0);
@@ -209,6 +210,7 @@ void huffman_load_codes(HuffmanCoder* coder, FILE* stream){
 void append_bit(int bit_value, FILE* stream, uchar* buffer, int* bit_index){
     //printf("%d ", bit_value);
     if(*bit_index >= 8){
+        //fprintf(stderr, "%d ", *buffer);
         fwrite(buffer, sizeof(char), 1, stream);
         *buffer = 0;
         *bit_index = 0;
@@ -231,8 +233,8 @@ void l_save_code(Node* node, FILE* stream, uchar* buffer, int* bit_index){
 }
 
 // return count of written bytes
-uint64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream){
-    uint64_t begin_pos = ftell(stream);
+int64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream){
+    int64_t begin_pos = ftello64(stream);
 
     uchar buffer = 0;
     int bit_index = 0;
@@ -243,7 +245,7 @@ uint64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream){
         }
     }
 
-    return ftell(stream) - begin_pos;
+    return ftello64(stream) - begin_pos;
 }
 
 HuffmanCode huffman_encode_symbol(HuffmanCoder* coder, uchar symbol){

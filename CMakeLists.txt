@@ -33,4 +33,8 @@ add_executable(ftarc main.c
         archive_structs.h
         exceptions.c
         exceptions.h
+        args_parser.c
+        args_parser.h
+        progress_display.c
+        progress_display.h
 )

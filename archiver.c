@@ -6,6 +6,14 @@
 #include "archiver.h"
 #include "string.h"
 #include "compression_algorithms/huffman.h"
+#include "exceptions.h"
+
+bool validate_signature(FILE* file){
+    char sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
+    fread(sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, file);
+    rewind(file);
+    return strcmp(sign, ARCHIVE_FILE_BEGIN) == 0;
+}
 
 Archive* archive_init(){
     Archive* arc = calloc(1, sizeof(Archive));
@@ -14,19 +22,36 @@ Archive* archive_init(){
     return arc;
 }
 
-Archive* archive_open(Str file_name){
+Archive* archive_open(Str file_name, bool write_mode){
     Archive* arc = archive_init();
     arc->file_name = file_name;
-    arc->archive_stream = fopen64(file_name.value, "rb");
+    arc->archive_stream = fopen64(file_name.value, write_mode ? "wb" : "rb");
+    if(arc->archive_stream == NULL){
+        throw(EXCEPTION_UNABLE_TO_OPEN_FILE, file_name.value);
+    }
+//    if(validate_signature(arc->archive_stream) == false){
+//        throw(EXCEPTION_NOT_AN_ARCHIVE, file_name.value);
+//    }
+
     return arc;
 }
 
 Archive* archive_new(Str file_name){
     Archive* arc = archive_init();
     arc->file_name = file_name;
+
+    if(is_file_exists(file_name.value)){
+        throw(EXCEPTION_FILE_ALREADY_EXISTS, file_name.value);
+    }
+
     arc->archive_stream = fopen64(file_name.value, "wb");
+    if(arc->archive_stream == NULL){
+        throw(EXCEPTION_UNABLE_TO_CREATE_FILE, file_name.value);
+    }
     return arc;
 }
+
+
 
 bool archive_validate(){
 
@@ -36,7 +61,7 @@ bool archive_validate(){
 // after function execute ptr won't change his position
 // file_id used only for set info.file_id
 ArchiveFile get_file_info(FILE* stream, int file_id){
-    int64_t prev_pos = ftell(stream);
+    int64_t prev_pos = ftello64(stream);
 
     ArchiveFile info = {0};
     //fseeko64(stream, sizeof(int64_t) + 16 + sizeof(time_t) + sizeof(int64_t), SEEK_CUR);
@@ -68,9 +93,9 @@ void read_total_huffman_code(HuffmanCoder* coder, FILE* from, MD5Context* hash){
     short code_len;
     fread(&code_len, sizeof(short), 1, from);
 
-    int64_t code_start_pos = ftell(from);
+    int64_t code_start_pos = ftello64(from);
     huffman_load_codes(coder, from);
-    int64_t code_end_pos = ftell(from);
+    int64_t code_end_pos = ftello64(from);
 
     if(hash != NULL){
         fseeko64(from, code_start_pos, SEEK_SET);
@@ -91,11 +116,14 @@ void read_total_huffman_code(HuffmanCoder* coder, FILE* from, MD5Context* hash){
 // also compute hash if hash not NULL
 // return total written length in bytes
 int write_total_huffman_code(HuffmanCoder* coder, FILE* out_file, MD5Context* hash){
-    int64_t code_len_pos = ftell(out_file);
-    fseeko64(out_file, sizeof(short), SEEK_CUR); // note code len pos
+    int64_t code_len_pos = ftello64(out_file);
+
+    short zero = 0;
+    //fseeko64(out_file, sizeof(short), SEEK_CUR); // note code len pos
+    fwrite(&zero, sizeof(short), 1, out_file);
 
     short code_len = (short)huffman_save_codes(coder, out_file); // write code
-    int64_t code_end_pos = ftell(out_file);
+    int64_t code_end_pos = ftello64(out_file);
 
     fseeko64(out_file, code_len_pos, SEEK_SET); // return to code len pos
     fwrite(&code_len, sizeof(short), 1, out_file); // write code len pos
@@ -106,6 +134,7 @@ int write_total_huffman_code(HuffmanCoder* coder, FILE* out_file, MD5Context* ha
         assert(code_len <= 320); // just in case lets assert it
 
         assert(code_len == fread(buffer, sizeof(uint8_t), code_len, out_file));
+
 
         md5Update(hash, buffer, code_len);
     }
@@ -138,7 +167,7 @@ int make_and_write_block(
 
     memset(buffer, 0, buffer_size);
 
-    int cur = ftell(to);
+    //int cur = ftello64(to);
 
     int stop_reason;
 
@@ -171,7 +200,7 @@ int make_and_write_block(
             bytes_count++;
         }
 
-        //printf("Enc %ld %d\n", ftell(to), bits_encoded);
+        //printf("Enc %ld %d\n", ftello64(to), bits_encoded);
 
         int to_write_length = buffer_size;
         if(stop_reason == STOP_REASON_EOF){
@@ -187,7 +216,7 @@ int make_and_write_block(
 
 
         *out_processed_bytes = processed_bytes;
-        return to_write_length + sizeof(short) + sizeof(short);
+        return to_write_length + (int)(sizeof(short) + sizeof(short));
     }
 
     return 0;
@@ -207,8 +236,8 @@ void make_and_write_file(
     md5Init(&hash_ctx);
 
 
-    int64_t start_pos = ftell(to);
-    fseeko64(to, sizeof(int64_t) + 16, SEEK_CUR);
+    int64_t start_pos = ftello64(to);
+    fseeko64(to, sizeof(int64_t) + 16, SEEK_CUR); // skip length and hash
 
     write_total_huffman_code(coder, to, &hash_ctx);
 
@@ -233,7 +262,7 @@ void make_and_write_file(
 
 
     int processed_bytes = 0;
-    int64_t length = ftell(to) - start_pos;
+    int64_t length = ftello64(to) - start_pos;
 
     int64_t block_length = -1;
     while (block_length){
@@ -249,7 +278,7 @@ void make_and_write_file(
 //    length -= (buffer_size - block_length);
 
 
-    int64_t file_end_pos = ftell(to);
+    int64_t file_end_pos = ftello64(to);
     fseeko64(to, start_pos, SEEK_SET);
 
     md5Update(&hash_ctx, (uint8_t*) &length, sizeof(int64_t));
@@ -257,7 +286,7 @@ void make_and_write_file(
 
     //print_hash(hash_ctx.digest);
     fwrite(&length, sizeof(int64_t), 1, to);
-    fwrite(hash_ctx.digest, sizeof(int64_t), 1, to); // save hash
+    fwrite(hash_ctx.digest, sizeof(uint8_t), 16, to); // save hash
     fseeko64(to, file_end_pos, SEEK_SET);
 
     if(file_hash != NULL){
@@ -276,7 +305,8 @@ void read_and_dec_block(
         int buffer_size,
         int block_length,
         uchar* out_buffer,
-        int out_buffer_size
+        int out_buffer_size,
+        MD5Context* hash_ctx
         ){
     
     short original_size;
@@ -286,13 +316,14 @@ void read_and_dec_block(
     
     short padding;
     fread(&padding, sizeof(short), 1, from);
-    int cur = ftell(from);
+    //int64_t cur = ftello64(from);
 
-    //printf("Dec %ld %d\n", ftell(from), block_length * 8 - padding);
+    //printf("Dec %ld %d\n", ftello64(from), block_length * 8 - padding);
 
-    int read_count = fread(buffer, sizeof(char), buffer_size, from);
+    fread(buffer, sizeof(char), buffer_size, from);
     int decoded_bytes = 0;
 
+    md5Update(hash_ctx, buffer, block_length - padding / 8);
 
     huffman_decode_symbols(coder, buffer, block_length * 8 - padding, out_buffer, &decoded_bytes);
 
@@ -307,36 +338,51 @@ void read_and_dec_file(
         uchar* buffer,
         int buffer_size,
         uchar* out_buffer,
-        int out_buffer_size
+        int out_buffer_size,
+        uint8_t* file_hash
         ){
 
-    int64_t file_begin_pos = ftell(from);
+    int64_t file_begin_pos = ftello64(from);
 
     int64_t length;
     fread(&length, sizeof(int64_t), 1, from);
 
-    uchar hash[16];
-    fread(hash, sizeof(uchar), 16, from);
+    uchar saved_hash[16];
+    fread(saved_hash, sizeof(uchar), 16, from);
 
     MD5Context hash_ctx;
     md5Init(&hash_ctx);
 
     read_total_huffman_code(coder, from, &hash_ctx);
 
-    fseeko64(from, sizeof(time_t), SEEK_CUR); // skip date
-    fseeko64(from, sizeof(int64_t), SEEK_CUR); // skip original_length
+    //fseeko64(from, sizeof(time_t), SEEK_CUR); // skip date
+    //fseeko64(from, sizeof(int64_t), SEEK_CUR); // skip original_length
+    time_t date;
+    fread(&date, sizeof(time_t), 1, from);
+    md5Update(&hash_ctx, (uint8_t*)&date, sizeof(date));
+
+    int64_t original_length;
+    fread(&original_length, sizeof(int64_t), 1, from);
+    md5Update(&hash_ctx, (uint8_t*)&original_length, sizeof(original_length));
+
 
     short name_length;
     fread(&name_length, sizeof(short), 1, from);
-    fseeko64(from, name_length, SEEK_CUR);
+    md5Update(&hash_ctx, (uint8_t*)&name_length, sizeof(name_length));
 
-    length -= ftell(from) - file_begin_pos;
+    char* name = malloc(name_length);
+    assert(name);
+    fread(name, sizeof(char), name_length, from);
+    md5Update(&hash_ctx, (uint8_t*)name, name_length);
+    free(name);
 
-    arc->decompressing_total = length / buffer_size + 1;
+    int64_t blocks_length = length - (ftello64(from) - file_begin_pos);
+
+    arc->decompressing_total = blocks_length / buffer_size + 1;
     arc->decompressing_current = 0;
 
-    for (int i = 0; i < length / buffer_size + 1; ++i) {
-        int64_t block_length = int64_min(buffer_size, length - buffer_size * i);
+    for (int i = 0; i < blocks_length / buffer_size + 1; ++i) {
+        //int64_t block_length = int64_min(buffer_size, length - buffer_size * i);
         read_and_dec_block(
                 coder,
                 from,
@@ -345,18 +391,33 @@ void read_and_dec_file(
                 buffer_size,
                 buffer_size,
                 out_buffer,
-                out_buffer_size
+                out_buffer_size,
+                &hash_ctx
                 );
 
         arc->decompressing_current++;
         //printf("%lld\n", arc->decompressing_current);
     }
 
+    md5Update(&hash_ctx, (uint8_t*)&length, sizeof(length));
+    md5Finalize(&hash_ctx);
+
+    if(file_hash != NULL){
+        for (int i = 0; i < 16; ++i) {
+            file_hash[i] = hash_ctx.digest[i];
+        }
+    }
+
+    for (int i = 0; i < 16; ++i) {
+        if(saved_hash[i] != hash_ctx.digest[i]){
+            throw(EXCEPTION_ARCHIVE_IS_CORRUPTED, "file hash not equals");
+        }
+    }
     //arc->work_stage = WORK_NONE;
 }
 
 
-void archive_compress(Archive* arc){
+void archive_save(Archive* arc){
     HuffmanCoder* coder = huffman_coder_create();
 
 //    for (int i = 0; i < arc->included_files->count; ++i) {
@@ -370,7 +431,7 @@ void archive_compress(Archive* arc){
 
     fwrite(ARCHIVE_FILE_BEGIN, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, out_file);
 
-    int64_t hash_pos = ftell(out_file);
+    int64_t hash_pos = ftello64(out_file);
     fseeko64(out_file, 16, SEEK_CUR);
 
     int files_count = arc->included_files->count;
@@ -425,13 +486,15 @@ void archive_compress(Archive* arc){
     huffman_free(coder);
 }
 
-void archive_decompress(Archive* arc, Str out_path, DynListInt* files_ids){
+// extract files with given ids and names
+// if some id and name point to same file extract will once
+void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
     HuffmanCoder* coder = huffman_coder_create();
     FILE* compressed = arc->archive_stream;
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
     fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
-    assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN));
+    assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
     fread(saved_hash, sizeof(uint8_t), 16, compressed);
@@ -450,7 +513,13 @@ void archive_decompress(Archive* arc, Str out_path, DynListInt* files_ids){
             fseeko64(compressed, -(int)(sizeof(int64_t)), SEEK_CUR); // move ptr because length did read
             ArchiveFile info = get_file_info(compressed, i);
 
-            FILE* decompressed = fopen64(info.file_name.value, "wb");
+            Str full_path = str_concat_path(out_path, info.file_name);
+
+            FILE* decompressed = fopen64(full_path.value, "wb");
+
+            printf("%s\n", full_path.value);
+
+            str_free(full_path);
 
             huffman_clear(coder);
             read_and_dec_file(
@@ -461,7 +530,8 @@ void archive_decompress(Archive* arc, Str out_path, DynListInt* files_ids){
                     buffer,
                     BUFFER_LENGTH,
                     out_buffer,
-                    BUFFER_LENGTH*8
+                    BUFFER_LENGTH*8,
+                    NULL
                     );
 
             fclose(decompressed);
@@ -473,6 +543,7 @@ void archive_decompress(Archive* arc, Str out_path, DynListInt* files_ids){
 }
 
 // also update archive_hash field
+// rewind FILE on end
 DynListArchiveFile* archive_get_files(Archive* arc){
     FILE* compressed = arc->archive_stream;
 
@@ -497,6 +568,8 @@ DynListArchiveFile* archive_get_files(Archive* arc){
         dl_arc_file_append(infos, info);
         fseeko64(compressed, info.compressed_file_size, SEEK_CUR);
     }
+
+    rewind(compressed);
 
     return infos;
 }
