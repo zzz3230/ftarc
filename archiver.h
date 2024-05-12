@@ -18,26 +18,7 @@ void archive_save(Archive* arc);
 void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids);
 DynListArchiveFile* archive_get_files(Archive* arc);
 void archive_free(Archive* arc);
-//void make_and_write_file(
-//        Archive* arc,
-//        HuffmanCoder* coder,
-//        FILE* from,
-//        FILE* to,
-//        Str from_filename,
-//        uchar* buffer,
-//        int buffer_size,
-//        uint8_t* file_hash
-//);
-//void read_and_dec_file(
-//        Archive* arc,
-//        HuffmanCoder* coder,
-//        FILE* from,
-//        FILE* to,
-//        uchar* buffer,
-//        int buffer_size,
-//        uchar* out_buffer,
-//        int out_buffer_size
-//);
 ArchiveFile get_file_info(FILE* stream, int file_id);
+bool archive_validate(Archive* arc);
 
 #endif

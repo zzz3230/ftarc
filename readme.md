@@ -1,5 +1,7 @@
 
 # F2ARC Archiver
+<img src="https://imgbly.com/ib/SwBFbYwU21.png">
+
 Based on Huffman algorithm.
 Основан на алгоритме Хаффмана.
 # Interface

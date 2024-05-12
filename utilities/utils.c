@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <synchapi.h>
 #include "utils.h"
+#include "Windows.h"
 
 void notnull_free(void* ptr){
     if(ptr != NULL) free(ptr);
@@ -103,4 +104,12 @@ int is_directory_exists(const char *path){
         return 1;
 
     return 0;
+}
+
+void trunc_file(FILE* file, int64_t length){
+#if WIN32 | WIN64
+    _chsize_s(_fileno(file), length);
+#else
+    not_implemented
+#endif
 }
