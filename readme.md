@@ -1,6 +1,6 @@
 
 # F2ARC Archiver
-<img src="https://imgbly.com/ib/SwBFbYwU21.png">
+<img src="https://github.com/zzz3230/ftarc/blob/master/f2arc_poster.png?raw=true">
 
 Based on Huffman algorithm.
 Основан на алгоритме Хаффмана.
