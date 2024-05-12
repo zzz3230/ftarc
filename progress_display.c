@@ -14,9 +14,6 @@ void progress_bar(double percent, int width){
 }
 
 void display_progress(Archive* arc){
-    color_init();
-
-    clock_t time_begin = clock();
 
     char last_file_index = -1;
     enum e_work_stage cur = WORK_NONE;
@@ -38,10 +35,13 @@ void display_progress(Archive* arc){
                 cur = arc->work_stage;
                 color_fg(stdout, COLOR_BGREEN);
                 if(cur == WORK_COMPRESSING){
-                    printf("\n====BEGIN COMPRESSING====\n\n");
+                    printf("\n====COMPRESSING====\n\n");
                 }
                 if(cur == WORK_DECOMPRESSING){
-                    printf("\n====BEGIN EXTRACTING====\n\n");
+                    printf("\n====EXTRACTING====\n\n");
+                }
+                if(cur == WORK_VALIDATING){
+                    printf("\n====VALIDATING====\n\n");
                 }
                 color_reset(stdout);
             }
@@ -79,7 +79,7 @@ void display_progress(Archive* arc){
             }
 
         }
-        if(cur == WORK_DECOMPRESSING){
+        if(cur == WORK_DECOMPRESSING || cur == WORK_VALIDATING){
 
             double per = (double)arc->decompressing_current / (double)arc->decompressing_total;
             printf("\r%lld / %lld | %.2lf%%  ",
@@ -92,15 +92,30 @@ void display_progress(Archive* arc){
         }
 
         fflush(stdout);
-        sleep_ms(100);
+
+        if(!arc->all_work_finished){
+            sleep_ms(100);
+        }
     }
 
     printf("\r                                                                       ");
 
-    clock_t time_end = clock();
-    double time_spent = (double)(time_end - time_begin) / CLOCKS_PER_SEC;
+
+    if(arc->validating_status != VALIDATING_NOTHING){
+        if(arc->validating_status == VALIDATING_INTACT){
+            color_fg(stdout, COLOR_BGREEN);
+            printf("\nArchive \"%s\" is intact\n", arc->file_name.value);
+            color_reset(stdout);
+        }
+        else{
+            color_fg(stdout, COLOR_BRED);
+            printf("\nArchive \"%s\" is corrupted\n", arc->file_name.value);
+            color_reset(stdout);
+        }
+    }
+
 
     color_fg(stdout, COLOR_BYELLOW);
-    printf("\rTime spent: %.3lf sec", time_spent);
+    printf("\rTime spent: %.3lf sec\n", arc->time_spent);
     color_reset(stdout);
 }

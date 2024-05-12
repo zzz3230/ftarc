@@ -25,5 +25,6 @@ int is_digits(const char* str);
 int is_file_exists(char* path);
 void sleep_ms(int milliseconds);
 int is_directory_exists(const char *path);
+void trunc_file(FILE* file, int64_t length);
 
 #endif

@@ -46,8 +46,12 @@ StartupArgs parse_args(int argc, char *argv[]){
 
     StartupArgs args = {0};
 
+    if(argc == 1){ // zero args == -h
+        args.action = ARC_ACTION_HELP;
+        return args;
+    }
 
-    for (int i = 1; i <= 2; ++i) { // first two args
+    for (int i = 1; i <= int_min(2, argc - 1); ++i) { // first two args
         if(argv[i][0] == '-'){
             for (int j = 1; argv[i][j]; ++j) {
                 args.action |= char_to_action(argv[i][j]);
@@ -61,6 +65,11 @@ StartupArgs parse_args(int argc, char *argv[]){
     if(args.action == 0){
         u_assert(0);
     }
+
+    if(args.action & ARC_ACTION_HELP){
+        return args;
+    }
+
 
     if(args.archive_name.length == 0){
         u_assert(0);

@@ -9,7 +9,7 @@ int int_comparator(int a, int b){
 }
 
 int str_comparator(Str a, Str b){
-    u_assert(0 && "not implemented");
+    return a.length == b.length && strcmp(a.value, b.value) == 0;
 }
 
 int arcfile_comparator(ArchiveFile a, ArchiveFile b){
