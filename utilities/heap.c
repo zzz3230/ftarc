@@ -1,6 +1,7 @@
 #include <assert.h>
 #include "heap.h"
 #include "stdlib.h"
+#include "../exceptions.h"
 
 int heap_left(int i){
     return 2 * i + 1;
@@ -19,7 +20,7 @@ void swap_heap_type(HEAP_TYPE* a, HEAP_TYPE* b){
 
 Heap* heap_create(int size){
     Heap* h = calloc(1, sizeof(Heap));
-    assert(h);
+    u_assert(h);
     h->arr = calloc(size, sizeof(HEAP_TYPE));
     h->size = size;
     return h;
@@ -52,7 +53,7 @@ void heap_siftdown(Heap* h, int i){
 
 void heap_push(Heap* h, HEAP_TYPE n){
     if(h->length >= h->size) {
-        assert(0 && "heap is full");
+        u_assert(0 && "heap is full");
     }
     h->arr[h->length] = n;
     h->length++;

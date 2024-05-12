@@ -59,19 +59,19 @@ StartupArgs parse_args(int argc, char *argv[]){
     }
 
     if(args.action == 0){
-        assert(0);
+        u_assert(0);
     }
 
     if(args.archive_name.length == 0){
-        assert(0);
+        u_assert(0);
     }
 
     if(args.action & ARC_ACTION_UNKNOWN){
-        assert(0);
+        u_assert(0);
     }
 
     if(is_conflict(args.action)){
-        assert(0);
+        u_assert(0);
     }
 
     if(is_require_uses(args.action)){
@@ -86,18 +86,18 @@ StartupArgs parse_args(int argc, char *argv[]){
             (args.action & ARC_ACTION_EXTRACT) == 0 && // extract can be without others args
             args.files == NULL && args.numbers == NULL
         ){
-            assert(0);
+            u_assert(0);
         }
 
         if(args.action & ARC_ACTION_APPEND && args.files == NULL){
-            assert(0);
+            u_assert(0);
         }
 
         int continue_index = 3; // two args parsed
 
         if(args.action & ARC_ACTION_EXTRACT){
             if(argc < 4){
-                assert(0);
+                u_assert(0);
             }
 
             args.extract_path = str(argv[3]);
@@ -115,14 +115,14 @@ StartupArgs parse_args(int argc, char *argv[]){
             else if(args.numbers != NULL){
 
                 if(!is_digits(argv[i])){
-                    assert(0);
+                    u_assert(0);
                 }
 
                 int value = strtol(argv[i], NULL, 10);
                 dl_int_append(args.numbers, value);
             }
             else{
-                assert(0);
+                u_assert(0);
             }
         }
     }

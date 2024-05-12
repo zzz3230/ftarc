@@ -7,10 +7,12 @@
 #include "stdlib.h"
 #include "../utilities/heap.h"
 #include "../utilities/utils.h"
+#include "../exceptions.h"
 
 
 Node* l_build_tree(HuffmanCoder* coder) {
-    assert(coder->intermediate_nodes == NULL);
+    u_assert(coder->intermediate_nodes == NULL);
+
     Node* sub_nodes = calloc(HUFF_ALPHA_LEN, sizeof(Node));
     coder->intermediate_nodes = sub_nodes;
     Heap* heap = heap_create(HUFF_ALPHA_LEN * 2);
@@ -66,7 +68,7 @@ void l_get_code_rec(HuffmanCode* codes, Node* current, char* way, int way_i){
 }
 
 void l_generate_symbols_nodes(HuffmanCoder* coder){
-    assert(coder->symbols_nodes == NULL);
+    u_assert(coder->symbols_nodes == NULL);
 
     Node* nodes = calloc(HUFF_ALPHA_LEN, sizeof(Node));
 
@@ -88,11 +90,11 @@ HuffmanCode* l_get_codes(Node* root, int n){
 
 HuffmanCoder* huffman_coder_create(){
     HuffmanCoder* c = calloc(1, sizeof(HuffmanCoder));
-    assert(c);
+    u_assert(c);
 
     c->_read_buffer_size = HANDLE_FILE_BUFFER_SIZE;
     c->_read_buffer = malloc(c->_read_buffer_size * sizeof(char));
-    assert(c->_read_buffer);
+    u_assert(c->_read_buffer);
 
     return c;
 }
@@ -170,7 +172,7 @@ Node* l_load_code(
         for (int i = 0; i < 8; ++i) {
             symbol_value |= (read_bit(stream, buffer, bit_index) << i);
         }
-        assert(symbol_value >= 0 && symbol_value <= 255);
+        u_assert(symbol_value >= 0 && symbol_value <= 255);
         return &symbols_nodes[symbol_value];
     }
     else{
@@ -185,8 +187,8 @@ Node* l_load_code(
     }
 }
 void huffman_load_codes(HuffmanCoder* coder, FILE* stream){
-    assert(coder->intermediate_nodes == NULL);
-    assert(coder->symbols_nodes == NULL);
+    u_assert(coder->intermediate_nodes == NULL);
+    u_assert(coder->symbols_nodes == NULL);
 
     l_generate_symbols_nodes(coder);
     Node* sub_nodes = calloc(HUFF_ALPHA_LEN, sizeof(Node));
@@ -249,7 +251,7 @@ int64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream){
 }
 
 HuffmanCode huffman_encode_symbol(HuffmanCoder* coder, uchar symbol){
-    assert(coder->codes);
+    u_assert(coder->codes);
     return coder->codes[symbol];
 }
 
@@ -270,6 +272,8 @@ void huffman_encode_symbols(
     int buffer_remain = 0;
     int in_buffer_index = 0;
     int processed_bytes = 0;
+
+    *stop_reason = 0;
 
     while (encoded_bits <= out_buffer_len * 8){
         if(buffer_remain == 0){
@@ -354,7 +358,7 @@ void huffman_decode_symbols(
 
 //            current = (buffer[i] & (1 << j)) ? current->right : current->left;
 
-            assert(current);
+            u_assert(current);
             if(current->value != -1){ // symbol founded
                 out_buffer[out_buffer_index++] = (uchar)current->value;
                 current = coder->root_node;
@@ -362,7 +366,7 @@ void huffman_decode_symbols(
         }
     }
     if(current != coder->root_node){
-        assert(0 && "The code is corrupted");
+        u_assert(0 && "The code is corrupted");
     }
     *out_len = out_buffer_index;
 }

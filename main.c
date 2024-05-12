@@ -25,19 +25,29 @@ void print_help(){
 void print_list(Archive* arc){
     DynListArchiveFile* files = archive_get_files(arc);
 
+    printf("NUM  SIZE\t DATE\t\t\t RATIO \t\t NAME\n");
+    printf("---- ----\t ----\t\t\t ----- \t\t ----\n");
+
     for (int i = 0; i < files->count; ++i) {
         ArchiveFile info = dl_arc_file_get(files, i);
 
         char file_size_str[256];
         pretty_bytes(file_size_str, info.original_file_size);
 
-        printf("[%d] %s \t %.2lf%% \t %s\n",
+        struct tm *date = localtime(&info.add_date);
+        char date_str[20];
+        strftime(date_str, sizeof(date_str), "%x %H:%M", date);
+
+        printf("[%d] %s\t %s \t %.2lf%% \t %s\n",
                info.file_id,
                file_size_str,
+               date_str,
                (double)info.compressed_file_size / (double)info.original_file_size * 100,
                info.file_name.value
         );
     }
+
+    printf("\n");
 }
 
 void* archive_work(void* th_args){

@@ -1,4 +1,5 @@
 #include "progress_display.h"
+#include "utilities/colorer.h"
 
 void progress_bar(double percent, int width){
     int reached = (int)((double)width * percent);
@@ -13,6 +14,8 @@ void progress_bar(double percent, int width){
 }
 
 void display_progress(Archive* arc){
+    color_init();
+
     clock_t time_begin = clock();
 
     char last_file_index = -1;
@@ -33,36 +36,48 @@ void display_progress(Archive* arc){
             last_file_index++;
             if(cur != arc->work_stage){
                 cur = arc->work_stage;
+                color_fg(stdout, COLOR_BGREEN);
                 if(cur == WORK_COMPRESSING){
-                    printf("\nbegin compressing\n\n");
+                    printf("\n====BEGIN COMPRESSING====\n\n");
                 }
                 if(cur == WORK_DECOMPRESSING){
-                    printf("\nbegin decompressing\n\n");
+                    printf("\n====BEGIN EXTRACTING====\n\n");
                 }
+                color_reset(stdout);
             }
 
-            printf("\r                                                                   ");
-            printf("\rFILE: %s\n", dl_str_last(arc->processed_files).value);
+            printf("\r                                                                      ");
 
+            color_fg(stdout, COLOR_BWHITE);
+            printf("\rFILE: %s\n", dl_str_get(arc->processed_files, last_file_index).value);
+            color_reset(stdout);
         }
 
         if(cur == WORK_HANDLING){
-            printf("\rhandling | %.2lf  ",
-                   arc->current_coder->read_progress * 100
-            );
-
-            progress_bar(arc->current_coder->read_progress, 32);
         }
 
         if(cur == WORK_COMPRESSING){
+            if(arc->compressing_total == 0){
+                // handling
+                if(arc->current_coder){
+                    printf("\rhandling | %.2lf  ",
+                           arc->current_coder->read_progress * 100
+                    );
 
-            double per = (double)arc->compressing_current / (double)arc->compressing_total;
-            printf("\r%lld / %lld | %.2lf%%  ",
-                   arc->compressing_current, arc->compressing_total,
-                   per * 100
-            );
+                    progress_bar(arc->current_coder->read_progress, 32);
+                }
+            }
+            else{
+                // compressing
+                double per = (double)arc->compressing_current / (double)arc->compressing_total;
+                printf("\r%lld / %lld | %.2lf%%  ",
+                       arc->compressing_current, arc->compressing_total,
+                       per * 100
+                );
 
-            progress_bar(per, 32);
+                progress_bar(per, 32);
+            }
+
         }
         if(cur == WORK_DECOMPRESSING){
 
@@ -80,10 +95,12 @@ void display_progress(Archive* arc){
         sleep_ms(100);
     }
 
-    printf("\r                                                                    ");
+    printf("\r                                                                       ");
 
     clock_t time_end = clock();
     double time_spent = (double)(time_end - time_begin) / CLOCKS_PER_SEC;
 
-    printf("\rtime spent: %.3lf sec", time_spent);
+    color_fg(stdout, COLOR_BYELLOW);
+    printf("\rTime spent: %.3lf sec", time_spent);
+    color_reset(stdout);
 }

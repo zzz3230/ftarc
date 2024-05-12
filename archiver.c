@@ -102,9 +102,10 @@ void read_total_huffman_code(HuffmanCoder* coder, FILE* from, MD5Context* hash){
 
         md5Update(hash, (uint8_t*) &code_len, 2);
         uint8_t buffer[320]; // huffman code always <= 319 bytes length
-        assert(code_len <= 320); // just in case lets assert it
+        u_assert(code_len <= 320); // just in case lets u_assert it
 
-        assert(code_len == fread(buffer, sizeof(uint8_t), code_len, from));
+        int did_read = (int)fread(buffer, sizeof(uint8_t), code_len, from);
+        u_assert(code_len == did_read);
 
         md5Update(hash, buffer, code_len);
 
@@ -131,9 +132,10 @@ int write_total_huffman_code(HuffmanCoder* coder, FILE* out_file, MD5Context* ha
     if(hash != NULL){
         md5Update(hash, (uint8_t*) &code_len, 2);
         uint8_t buffer[320]; // huffman code always <= 319 bytes length
-        assert(code_len <= 320); // just in case lets assert it
+        u_assert(code_len <= 320); // just in case lets u_assert it
 
-        assert(code_len == fread(buffer, sizeof(uint8_t), code_len, out_file));
+        int did_read = (int)fread(buffer, sizeof(uint8_t), code_len, out_file);
+        u_assert(code_len == did_read);
 
 
         md5Update(hash, buffer, code_len);
@@ -185,18 +187,19 @@ int make_and_write_block(
         // write original_size
         short short_proc_bytes = (short)processed_bytes;
         if(fwrite(&short_proc_bytes, sizeof(short), 1, to) != 1){
-            assert(0);
+            u_assert(0);
         }
         // write padding_length
         short padding = (short)((buffer_size * 8 - bits_encoded));     // padding to byte:  aaa00000 00000000 00000000
-                                                                        //                     ^^^^^ this is padding
+                                                                        //                     ^^^^^ ^^^^^^^^ ^^^^^^^^
+                                                                        //                     this is padding
 
         if(fwrite(&padding, sizeof(short), 1, to) != 1){
-            assert(0);
+            u_assert(0);
         }
 
         int bytes_count = bits_encoded / 8;
-        if(padding != 0){
+        if(padding % 8 != 0){
             bytes_count++;
         }
 
@@ -205,14 +208,15 @@ int make_and_write_block(
         int to_write_length = buffer_size;
         if(stop_reason == STOP_REASON_EOF){
             to_write_length = bytes_count;
+            //printf("EOF\n");
         }
 
-        md5Update(hash_ctx, buffer, to_write_length);
-
+        //printf("%d ", bytes_count);
+        md5Update(hash_ctx, buffer, bytes_count);
 
         // write data
         int written = (int)fwrite(buffer, sizeof(char), to_write_length, to);
-        assert(written == to_write_length);
+        u_assert(written == to_write_length);
 
 
         *out_processed_bytes = processed_bytes;
@@ -264,13 +268,20 @@ void make_and_write_file(
     int processed_bytes = 0;
     int64_t length = ftello64(to) - start_pos;
 
+
+
+    int blocks_count = 0;
+
     int64_t block_length = -1;
     while (block_length){
         block_length = make_and_write_block(coder, from, to, buffer, buffer_size, &processed_bytes, &hash_ctx);
-
+        blocks_count++;
         length += block_length;
         arc->compressing_current += processed_bytes;
     }
+
+
+    //printf("[%lld]", length);
 
     // move to end of last block,
     // because make_and_write_block() fill remaining bytes with zero
@@ -306,13 +317,14 @@ void read_and_dec_block(
         int block_length,
         uchar* out_buffer,
         int out_buffer_size,
-        MD5Context* hash_ctx
+        MD5Context* hash_ctx,
+        bool is_last_block
         ){
     
     short original_size;
     fread(&original_size, sizeof(short), 1, from);
 
-    assert(out_buffer_size >= original_size);
+    u_assert(out_buffer_size >= original_size);
     
     short padding;
     fread(&padding, sizeof(short), 1, from);
@@ -320,14 +332,18 @@ void read_and_dec_block(
 
     //printf("Dec %ld %d\n", ftello64(from), block_length * 8 - padding);
 
-    fread(buffer, sizeof(char), buffer_size, from);
+    int count_to_read = is_last_block ? block_length - padding / 8 : block_length;
+
+    fread(buffer, sizeof(char), count_to_read, from);
     int decoded_bytes = 0;
 
+    //printf("%d ", block_length - padding / 8);
     md5Update(hash_ctx, buffer, block_length - padding / 8);
 
     huffman_decode_symbols(coder, buffer, block_length * 8 - padding, out_buffer, &decoded_bytes);
 
-    assert(decoded_bytes == fwrite(out_buffer, sizeof(char), decoded_bytes, to));
+    int wrote = (int)fwrite(out_buffer, sizeof(char), decoded_bytes, to);
+    u_assert(decoded_bytes == wrote);
 }
 
 void read_and_dec_file(
@@ -371,17 +387,22 @@ void read_and_dec_file(
     md5Update(&hash_ctx, (uint8_t*)&name_length, sizeof(name_length));
 
     char* name = malloc(name_length);
-    assert(name);
+    u_assert(name);
     fread(name, sizeof(char), name_length, from);
     md5Update(&hash_ctx, (uint8_t*)name, name_length);
     free(name);
 
     int64_t blocks_length = length - (ftello64(from) - file_begin_pos);
 
-    arc->decompressing_total = blocks_length / buffer_size + 1;
+    int block_size = buffer_size + (int)(sizeof(short) + sizeof(short));
+
+    arc->decompressing_total = blocks_length / block_size + 1;
     arc->decompressing_current = 0;
 
-    for (int i = 0; i < blocks_length / buffer_size + 1; ++i) {
+    //printf("[%lld]", length);
+
+    int blocks_count =(int)(blocks_length / (int64_t)(block_size) + 1);
+    for (int i = 0; i < blocks_count; ++i) {
         //int64_t block_length = int64_min(buffer_size, length - buffer_size * i);
         read_and_dec_block(
                 coder,
@@ -392,7 +413,8 @@ void read_and_dec_file(
                 buffer_size,
                 out_buffer,
                 out_buffer_size,
-                &hash_ctx
+                &hash_ctx,
+                i == blocks_count - 1
                 );
 
         arc->decompressing_current++;
@@ -419,6 +441,7 @@ void read_and_dec_file(
 
 void archive_save(Archive* arc){
     HuffmanCoder* coder = huffman_coder_create();
+    arc->current_coder = coder;
 
 //    for (int i = 0; i < arc->included_files->count; ++i) {
 //        FILE* file = fopen(dl_str_get(arc->included_files, i).value, "rb");
@@ -446,18 +469,20 @@ void archive_save(Archive* arc){
     uchar buffer[BUFFER_LENGTH] = {0};
 
     arc->work_stage = WORK_COMPRESSING;
-
     for (int i = 0; i < arc->included_files->count; ++i) {
         Str file_to_compress = dl_str_get(arc->included_files, i);
         FILE *file = fopen64(file_to_compress.value, "rb");
         dl_str_append(arc->processed_files, file_to_compress);
+
 
         // HANDLING FILE
         huffman_clear(coder);
         huffman_handle_file(coder, file);
         huffman_build_codes(coder);
 
+
         Str in_archive_file_name = str(get_file_name_from_path(file_to_compress.value));
+        //printf("[BEGIN %lld]", ftello64(out_file));
 
         // COMPRESSING & WRITING FILE
         make_and_write_file(
@@ -471,6 +496,9 @@ void archive_save(Archive* arc){
                 file_hash
                 );
         fclose(file);
+
+        //printf("[END %lld]", ftello64(out_file));
+
 
         md5Update(&archive_hash, file_hash, 16);
     }
@@ -494,7 +522,7 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
     fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
-    assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
+    u_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
     fread(saved_hash, sizeof(uint8_t), 16, compressed);
@@ -505,6 +533,8 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
     uchar buffer[BUFFER_LENGTH] = {0};
     uchar out_buffer[BUFFER_LENGTH*8] = {0};
 
+    arc->work_stage = WORK_DECOMPRESSING;
+
     for (int i = 0; i < files_count; ++i) {
         int64_t length;
         fread(&length, sizeof(int64_t), 1, compressed);
@@ -513,13 +543,16 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
             fseeko64(compressed, -(int)(sizeof(int64_t)), SEEK_CUR); // move ptr because length did read
             ArchiveFile info = get_file_info(compressed, i);
 
+            //printf("[BEGIN %lld]", ftello64(compressed));
+
             Str full_path = str_concat_path(out_path, info.file_name);
 
             FILE* decompressed = fopen64(full_path.value, "wb");
 
-            printf("%s\n", full_path.value);
+            //printf("%s\n", full_path.value);
 
-            str_free(full_path);
+            dl_str_append(arc->processed_files, full_path);
+
 
             huffman_clear(coder);
             read_and_dec_file(
@@ -535,11 +568,16 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
                     );
 
             fclose(decompressed);
+
+            //printf("[END %lld]", ftello64(compressed));
+
         }
         else{
             fseeko64(compressed, length - (int)sizeof(length), SEEK_CUR); // because length include length length :)
         }
     }
+
+    arc->work_stage = WORK_NONE;
 }
 
 // also update archive_hash field
@@ -549,7 +587,7 @@ DynListArchiveFile* archive_get_files(Archive* arc){
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
     fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
-    assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
+    u_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
     fread(saved_hash, sizeof(uint8_t), 16, compressed);

@@ -12,6 +12,8 @@ add_compile_options(
         $<$<CONFIG:DEBUG>:-O0>
 )
 
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DDEBUG")
+
 add_executable(ftarc main.c
         utilities/graph.c
         compression_algorithms/huffman.c
