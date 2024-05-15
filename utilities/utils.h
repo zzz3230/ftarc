@@ -7,7 +7,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
+#include <stdbool.h>
+#include "assert.h"
 
 void notnull_free(void* ptr);
 int int_min(int a, int b);
@@ -23,8 +24,13 @@ char* get_file_name_from_path(char* path);
 int is_digits(const char* str);
 
 int is_file_exists(char* path);
-void sleep_ms(int milliseconds);
+int can_read_file(char* path);
+bool create_directory(const char* path);
 int is_directory_exists(const char *path);
-void trunc_file(FILE* file, int64_t length);
+
+void sleep_ms(int milliseconds);
+bool trunc_file(FILE* file, int64_t length);
+void highlight_print(const char* message);
+int str_endswith(const char *str, const char *suffix);
 
 #endif

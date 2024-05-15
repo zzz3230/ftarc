@@ -3,13 +3,20 @@
 
 void progress_bar(double percent, int width){
     int reached = (int)((double)width * percent);
+
+    if(any_exceptions()) { return; }
     printf("[");
+
     for (int i = 0; i < reached; ++i) {
+        if(any_exceptions()) { return; }
         putchar(219);
     }
     for (int i = 0; i < width - reached; ++i) {
+        if(any_exceptions()) { return; }
         putchar(177);
     }
+
+    if(any_exceptions()) { return; }
     printf("]");
 }
 
@@ -23,6 +30,10 @@ void display_progress(Archive* arc){
             if(arc->processed_files->count <= last_file_index + 1){
                 break;
             }
+        }
+
+        if(any_exceptions()){
+            break;
         }
 
         if(arc->work_stage == WORK_NONE){
@@ -44,6 +55,11 @@ void display_progress(Archive* arc){
                     printf("\n====VALIDATING====\n\n");
                 }
                 color_reset(stdout);
+                fflush(stdout);
+            }
+
+            if(any_exceptions()){
+                break;
             }
 
             printf("\r                                                                      ");
@@ -60,6 +76,9 @@ void display_progress(Archive* arc){
             if(arc->compressing_total == 0){
                 // handling
                 if(arc->current_coder){
+                    if(any_exceptions()){
+                        break;
+                    }
                     printf("\rhandling | %.2lf  ",
                            arc->current_coder->read_progress * 100
                     );
@@ -70,6 +89,9 @@ void display_progress(Archive* arc){
             else{
                 // compressing
                 double per = (double)arc->compressing_current / (double)arc->compressing_total;
+                if(any_exceptions()){
+                    break;
+                }
                 printf("\r%lld / %lld | %.2lf%%  ",
                        arc->compressing_current, arc->compressing_total,
                        per * 100
@@ -82,6 +104,9 @@ void display_progress(Archive* arc){
         if(cur == WORK_DECOMPRESSING || cur == WORK_VALIDATING){
 
             double per = (double)arc->decompressing_current / (double)arc->decompressing_total;
+            if(any_exceptions()){
+                break;
+            }
             printf("\r%lld / %lld | %.2lf%%  ",
                    arc->decompressing_current, arc->decompressing_total,
                    per * 100
@@ -116,6 +141,6 @@ void display_progress(Archive* arc){
 
 
     color_fg(stdout, COLOR_BYELLOW);
-    printf("\rTime spent: %.3lf sec\n", arc->time_spent);
+    printf("\rTime spent: %.3lf sec\n\n", arc->time_spent);
     color_reset(stdout);
 }

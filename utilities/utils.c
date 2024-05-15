@@ -3,6 +3,7 @@
 #include <synchapi.h>
 #include "utils.h"
 #include "Windows.h"
+#include "colorer.h"
 
 void notnull_free(void* ptr){
     if(ptr != NULL) free(ptr);
@@ -79,6 +80,9 @@ int is_digits(const char* str){
 int is_file_exists(char* path){
     return access(path, F_OK) != -1;
 }
+int can_read_file(char* path){
+    return is_file_exists(path) && access(path, R_OK) != -1;
+}
 
 void sleep_ms(int milliseconds)
 {
@@ -94,7 +98,7 @@ void sleep_ms(int milliseconds)
 #endif
 }
 
-int is_directory_exists(const char *path){
+int is_directory_exists(const char* path){
     struct stat stats;
 
     stat(path, &stats);
@@ -106,10 +110,55 @@ int is_directory_exists(const char *path){
     return 0;
 }
 
-void trunc_file(FILE* file, int64_t length){
+bool create_directory(const char* path){
+    int res = CreateDirectory(path, NULL);
+    return res;
+}
+
+bool trunc_file(FILE* file, int64_t length){
+    fseeko64(file, 0, SEEK_SET);
 #if WIN32 | WIN64
-    _chsize_s(_fileno(file), length);
+    return 0 == _chsize_s(_fileno(file), length);
 #else
     not_implemented
 #endif
+}
+
+
+void highlight_print(const char* message){
+    bool super_highlight = false;
+
+    for (int i = 0; message[i]; ++i) {
+        if(message[i] == '#'){
+            super_highlight = !super_highlight;
+            if(super_highlight){
+                color_fg(stdout, COLOR_BLACK);
+                color_bg(stdout, COLOR_BWHITE);
+            }
+            else{
+                color_bg(stdout, COLOR_BLACK);
+                color_reset(stdout);
+            }
+            continue;
+        }
+        if(message[i] == ']'){
+            color_reset(stdout);
+        }
+
+        putchar(message[i]);
+
+        if(message[i] == '['){
+            color_fg(stdout, COLOR_BYELLOW);
+        }
+    }
+}
+
+int str_endswith(const char *str, const char *suffix) {
+    if (!str || !suffix)
+        return 0;
+    size_t len_str = strlen(str);
+    size_t len_suffix = strlen(suffix);
+    if (len_suffix > len_str)
+        return 0;
+    return strncmp(str + len_str - len_suffix, suffix, len_suffix) == 0;
 }

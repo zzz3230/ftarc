@@ -29,17 +29,18 @@ typedef struct s_archive{
     int64_t compressing_total;
     int64_t decompressing_current;
     int64_t decompressing_total;
-    int64_t validating_total;
-    int64_t validating_current;
     enum e_work_stage work_stage;
     bool all_work_finished;
     DynListStr* processed_files;
     HuffmanCoder* current_coder;
     FILE* archive_stream;
-    uint64_t archive_hash[16]; // setting by read_archive_header()
+    uint8_t archive_hash[16]; // setting by read_archive_header()
     int archive_files_count; //   setting by read_archive_header()
     double time_spent;
     enum e_validating_status validating_status;
+    Str writing_file_name; // make available to delete corrupted file then ERROR
+    FILE* writing_file_stream; // make available to delete corrupted file then ERROR
+    int64_t last_safe_eof; // pos of last complete written file (used for truc file if ERROR)
 } Archive;
 
 typedef struct s_archive_file{

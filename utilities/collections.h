@@ -51,15 +51,23 @@ void prefix##_free(name* list){\
 }\
 void prefix##_clear(name* list){\
     list->count = 0;\
-}                                                   \
-int prefix##_contains(name* list, type value){      \
+}                                                              \
+                                                               \
+int prefix##_find(name* list, type value){      \
     for(int i = 0; i < list->count; i++){           \
         if(comparator(list->arr[i], value)){                    \
-            return 1;                                                        \
+            return i;                                                        \
         }                                                \
     }                                                           \
-    return 0;\
+    return -1;\
+}\
+void prefix##_remove_at(name* list, int index){\
+    for(int i = index; i < list->count - 1; i++){           \
+        list->arr[i] = list->arr[i+1];\
+    }                                                          \
+    list->count--;                                                               \
 }
+
 #define DYN_LIST_HEADER_GENERATOR(type, name, prefix) \
 typedef struct s_##name{\
     type* arr;\
@@ -73,7 +81,8 @@ type* prefix##_get_ref(name* list, int index);\
 type prefix##_last(name* list);\
 void prefix##_free(name* list);\
 void prefix##_clear(name* list);                      \
-int prefix##_contains(name* list, type value);
+int prefix##_find(name* list, type value);            \
+void prefix##_remove_at(name* list, int index)
 
 DYN_LIST_HEADER_GENERATOR(Str, DynListStr, dl_str);
 DYN_LIST_HEADER_GENERATOR(int, DynListInt, dl_int);

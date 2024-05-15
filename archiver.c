@@ -15,42 +15,6 @@ bool validate_signature(FILE* file){
     return strcmp(sign, ARCHIVE_FILE_BEGIN) == 0;
 }
 
-Archive* archive_init(){
-    Archive* arc = calloc(1, sizeof(Archive));
-    arc->included_files = dl_str_create(16);
-    arc->processed_files = dl_str_create(16);
-    return arc;
-}
-
-Archive* archive_open(Str file_name, bool write_mode){
-    Archive* arc = archive_init();
-    arc->file_name = file_name;
-    arc->archive_stream = fopen64(file_name.value, write_mode ? "wb" : "rb");
-    if(arc->archive_stream == NULL){
-        throw(EXCEPTION_UNABLE_TO_OPEN_FILE, file_name.value);
-    }
-//    if(validate_signature(arc->archive_stream) == false){
-//        throw(EXCEPTION_NOT_AN_ARCHIVE, file_name.value);
-//    }
-
-    return arc;
-}
-
-Archive* archive_new(Str file_name){
-    Archive* arc = archive_init();
-    arc->file_name = file_name;
-
-    if(is_file_exists(file_name.value)){
-        throw(EXCEPTION_FILE_ALREADY_EXISTS, file_name.value);
-    }
-
-    arc->archive_stream = fopen64(file_name.value, "wb");
-    if(arc->archive_stream == NULL){
-        throw(EXCEPTION_UNABLE_TO_CREATE_FILE, file_name.value);
-    }
-    return arc;
-}
-
 // ptr must be at the start of file
 // ptr will be at the end of header
 void read_archive_header(Archive* arc){
@@ -62,10 +26,76 @@ void read_archive_header(Archive* arc){
     u_assert(1 == fread(&arc->archive_files_count, sizeof(int), 1, arc->archive_stream));
 }
 
+Archive* archive_init(){
+    Archive* arc = calloc(1, sizeof(Archive));
+    arc->included_files = dl_str_create(16);
+    arc->processed_files = dl_str_create(16);
+    return arc;
+}
+
+Archive* archive_open(Str file_name, bool write_mode){
+    Archive* arc = archive_init();
+    arc->file_name = file_name;
+    arc->archive_stream = fopen64(file_name.value, write_mode ? "rb+" : "rb");
+    if(arc->archive_stream == NULL){
+        throw(EXCEPTION_UNABLE_TO_OPEN_FILE, file_name.value);
+    }
+
+    set_loaded_archive(arc);
+
+    read_archive_header(arc);
+    rewind(arc->archive_stream);
+
+//    if(validate_signature(arc->archive_stream) == false){
+//        throw(EXCEPTION_NOT_AN_ARCHIVE, file_name.value);
+//    }
+
+    return arc;
+}
+
+Archive* archive_new(Str file_name, bool override){
+    Archive* arc = archive_init();
+    arc->file_name = file_name;
+
+
+    if(!override && is_file_exists(file_name.value)){
+        throw(EXCEPTION_FILE_ALREADY_EXISTS, file_name.value);
+    }
+
+    arc->archive_stream = fopen64(file_name.value, "wb");
+    if(arc->archive_stream == NULL){
+        throw(EXCEPTION_UNABLE_TO_CREATE_FILE, file_name.value);
+    }
+
+    set_loaded_archive(arc);
+    return arc;
+}
+
+DynListInt* get_files_ids_by_names(Archive* arc, DynListStr* files){
+    DynListInt* final_ids = dl_int_create(8);
+    DynListArchiveFile* arc_files = archive_get_files(arc, -1);
+    for (int i = 0; i < arc_files->count; ++i) {
+        int index = dl_str_find(files, dl_arc_file_get(arc_files, i).file_name);
+        if(index != -1){
+            dl_int_append(final_ids, i);
+            dl_str_remove_at(files, index);
+        }
+        archive_file_free(dl_arc_file_get_ref(arc_files, i));
+    }
+
+    if(files->count > 0){
+        throw(EXCEPTION_NOT_FOUND_IN_ARCHIVE, dl_str_get(files, 0).value);
+    }
+
+    return final_ids;
+}
+
 // ptr must be at the start of file
 // ptr will be at the end of header
+// max files count getting form arc->archive_files_count
 void update_archive_header(Archive* arc){
-    DynListArchiveFile* files = archive_get_files(arc);
+    //printf("\n\n{%d}\n\n", arc->archive_files_count);
+    DynListArchiveFile* files = archive_get_files(arc, arc->archive_files_count);
 
     MD5Context arc_hash;
     md5Init(&arc_hash);
@@ -74,6 +104,7 @@ void update_archive_header(Archive* arc){
 
     for (int i = 0; i < files->count; ++i) {
         md5Update(&arc_hash, dl_arc_file_get(files, i).file_hash, 16);
+        archive_file_free(dl_arc_file_get_ref(files, i));
     }
 
     md5Finalize(&arc_hash);
@@ -85,6 +116,12 @@ void update_archive_header(Archive* arc){
     fwrite(&files->count, sizeof(int), 1, arc->archive_stream);
 }
 
+
+void skip_file(FILE* stream){
+    int64_t length;
+    fread(&length, sizeof(int64_t), 1, stream);
+    fseeko64(stream, length - (int)sizeof(length), SEEK_CUR);
+}
 
 
 // ptr in stream must be in start of the file
@@ -217,6 +254,9 @@ int make_and_write_block(
             );
 
     if(bits_encoded > 0){
+        if(any_exceptions())
+            return 0;
+
         // write original_size
         short short_proc_bytes = (short)processed_bytes;
         if(fwrite(&short_proc_bytes, sizeof(short), 1, to) != 1){
@@ -272,6 +312,8 @@ void make_and_write_file(
     MD5Context hash_ctx;
     md5Init(&hash_ctx);
 
+    if(any_exceptions())
+        return;
 
     int64_t start_pos = ftello64(to);
     fseeko64(to, sizeof(int64_t) + 16, SEEK_CUR); // skip length and hash
@@ -286,9 +328,8 @@ void make_and_write_file(
     fwrite(&original_size, sizeof(int64_t), 1, to);
     md5Update(&hash_ctx, (uint8_t *) &original_size, sizeof(int64_t));
 
-    arc->compressing_total = original_size;
     arc->compressing_current = 0;
-
+    arc->compressing_total = original_size;
 
     short short_file_name_length = (short)from_filename.length;
     fwrite(&short_file_name_length, sizeof(short), 1, to);
@@ -376,8 +417,10 @@ void read_and_dec_block(
     if(!hash_only){
         huffman_decode_symbols(coder, buffer, block_length * 8 - padding, out_buffer, &decoded_bytes);
 
-        int wrote = (int)fwrite(out_buffer, sizeof(char), decoded_bytes, to);
-        u_assert(decoded_bytes == wrote);
+        if(!any_exceptions()){
+            int wrote = (int)fwrite(out_buffer, sizeof(char), decoded_bytes, to);
+            u_assert(decoded_bytes == wrote);
+        }
     }
 }
 
@@ -435,7 +478,7 @@ void read_and_dec_file(
     arc->decompressing_total = blocks_length / block_size + 1;
     arc->decompressing_current = 0;
 
-    int blocks_count =(int)(blocks_length / (int64_t)(block_size) + 1);
+    int blocks_count = (int)(blocks_length / (int64_t)(block_size) + 1);
     for (int i = 0; i < blocks_count; ++i) {
         read_and_dec_block(
                 coder,
@@ -475,33 +518,65 @@ void archive_save(Archive* arc){
     HuffmanCoder* coder = huffman_coder_create();
     arc->current_coder = coder;
 
+    arc->work_stage = WORK_COMPRESSING;
+
+    for (int i = 0; i < arc->included_files->count; ++i) {
+        char* path = dl_str_get(arc->included_files, i).value;
+        if(!is_file_exists(path)){
+            throw(EXCEPTION_UNABLE_TO_OPEN_FILE, path);
+        }
+        else if(!can_read_file(path)){
+            throw(EXCEPTION_CANT_READ_FILE, path);
+        }
+    }
 
     FILE* out_file = arc->archive_stream;
+    arc->writing_file_stream = arc->archive_stream;
+    arc->writing_file_name = arc->file_name;
 
     fwrite(ARCHIVE_FILE_BEGIN, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, out_file);
 
     int64_t hash_pos = ftello64(out_file);
-    fseeko64(out_file, 16, SEEK_CUR);
 
-    int files_count = arc->included_files->count;
+    //fseeko64(out_file, 16, SEEK_CUR);
+    int64_t zero = 0;
+    fwrite(&zero, sizeof(int64_t), 1, out_file);
+    fwrite(&zero, sizeof(int64_t), 1, out_file); // writing empty hash
+
+    int files_count = arc->archive_files_count + arc->included_files->count;
     fwrite(&files_count, sizeof(int), 1, out_file);
 
 
     MD5Context archive_hash;
     md5Init(&archive_hash);
 
-    md5Update(&archive_hash, (uint8_t*) &arc->included_files->count, sizeof(int));
+    md5Update(&archive_hash, (uint8_t*) &files_count, sizeof(int));
 
     uint8_t file_hash[16];
 
     uchar buffer[BUFFER_LENGTH] = {0};
 
-    arc->work_stage = WORK_COMPRESSING;
+    for (int i = 0; i < arc->archive_files_count; ++i) {
+        ArchiveFile info = get_file_info(out_file, i);
+        md5Update(&archive_hash, info.file_hash, 16);
+        archive_file_free(&info);
+
+        skip_file(out_file); // skip existing files
+    }
+
+    arc->last_safe_eof = ftello64(out_file);
+    //printf("\n{%lld}\n", arc->last_safe_eof);
+
     for (int i = 0; i < arc->included_files->count; ++i) {
         Str file_to_compress = dl_str_get(arc->included_files, i);
         FILE *file = fopen64(file_to_compress.value, "rb");
         dl_str_append(arc->processed_files, file_to_compress);
 
+        if(file == NULL){
+            throw(EXCEPTION_UNABLE_TO_OPEN_FILE, file_to_compress.value);
+        }
+
+        arc->compressing_total = 0; // because handling progress output when == 0
 
         // HANDLING FILE
         huffman_clear(coder);
@@ -523,27 +598,47 @@ void archive_save(Archive* arc){
                 );
         fclose(file);
 
+        if(any_exceptions()){
+            break;
+        }
+
+        arc->last_safe_eof = ftello64(out_file);
+        //printf("\n{%lld}\n", arc->last_safe_eof);
+
+        arc->archive_files_count++;
 
         md5Update(&archive_hash, file_hash, 16);
     }
 
-    md5Finalize(&archive_hash);
-    fseeko64(out_file, hash_pos, SEEK_SET);
-    fwrite(archive_hash.digest, sizeof(uint8_t), 16, out_file);
+    if(!any_exceptions()){
+        md5Finalize(&archive_hash);
+        fseeko64(out_file, hash_pos, SEEK_SET);
+
+        fwrite(archive_hash.digest, sizeof(uint8_t), 16, out_file);
 
 
-    fclose(out_file);
+        fclose(out_file);
 
-    arc->work_stage = WORK_NONE;
+        arc->writing_file_stream = NULL;
+
+        arc->work_stage = WORK_NONE;
+    }
 
     huffman_free(coder);
 }
 
 // extract files with given ids and names
 // if some id and name point to same file extract will once
+// will create out_path if not exists
 void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
     HuffmanCoder* coder = huffman_coder_create();
     FILE* compressed = arc->archive_stream;
+
+    if(!is_directory_exists(out_path.value)){
+        if(!create_directory(out_path.value)){
+            throw(EXCEPTION_UNABLE_TO_CREATE_FOLDER, out_path.value);
+        }
+    }
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
     fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
@@ -561,10 +656,14 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
     arc->work_stage = WORK_DECOMPRESSING;
 
     for (int i = 0; i < files_count; ++i) {
+
+        if(any_exceptions())
+            break;
+
         int64_t length;
         fread(&length, sizeof(int64_t), 1, compressed);
 
-        if(dl_int_contains(files_ids, i)){
+        if(dl_int_find(files_ids, i) != -1){
             fseeko64(compressed, -(int)(sizeof(int64_t)), SEEK_CUR); // move ptr because length did read
             ArchiveFile info = get_file_info(compressed, i);
 
@@ -574,10 +673,18 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
 
             FILE* decompressed = fopen64(full_path.value, "wb");
 
+            if(decompressed == NULL){
+                throw(EXCEPTION_UNABLE_TO_CREATE_FILE, full_path.value);
+            }
+
+            arc->writing_file_stream = decompressed;
+            arc->writing_file_name = full_path;
             //printf("%s\n", full_path.value);
 
             dl_str_append(arc->processed_files, full_path);
 
+            if(any_exceptions())
+                break;
 
             huffman_clear(coder);
             read_and_dec_file(
@@ -594,9 +701,7 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
                     );
 
             fclose(decompressed);
-
-            //printf("[END %lld]", ftello64(compressed));
-
+            arc->writing_file_stream = NULL;
         }
         else{
             fseeko64(compressed, length - (int)sizeof(length), SEEK_CUR); // because length include length length :)
@@ -606,13 +711,19 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
     arc->work_stage = WORK_NONE;
 }
 
+
 // also update archive_hash field
 // rewind FILE on end
-DynListArchiveFile* archive_get_files(Archive* arc){
+// max_files == -1 for
+DynListArchiveFile* archive_get_files(Archive* arc, int max_files){
     FILE* compressed = arc->archive_stream;
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
-    fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
+    u_assert(
+            sizeof(ARCHIVE_FILE_BEGIN) - 1 ==
+            fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed)
+            );
+
     u_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
@@ -627,7 +738,11 @@ DynListArchiveFile* archive_get_files(Archive* arc){
 
     DynListArchiveFile* infos = dl_arc_file_create(files_count);
 
-    for (int i = 0; i < files_count; ++i) {
+    if(max_files == -1){
+        max_files = files_count;
+    }
+
+    for (int i = 0; i < int_min(files_count, max_files); ++i) {
         ArchiveFile info = get_file_info(compressed, i);
         dl_arc_file_append(infos, info);
         fseeko64(compressed, info.compressed_file_size, SEEK_CUR);
@@ -649,7 +764,6 @@ bool archive_validate(Archive* arc){
     MD5Context current_hash;
     md5Init(&current_hash);
 
-    md5Update(&current_hash, (uint8_t*) arc->archive_hash, sizeof(arc->archive_hash));
     md5Update(&current_hash, (uint8_t*) &arc->archive_files_count, sizeof(int));
 
     uint8_t file_hash[16];
@@ -683,6 +797,100 @@ bool archive_validate(Archive* arc){
     return true;
 }
 
+void archive_remove_files(Archive* arc, DynListInt* files_ids){
+
+    if(files_ids->count == 0){
+        return;
+    }
+
+    read_archive_header(arc);
+
+    int64_t writing_ptr = ftello64(arc->archive_stream);
+    int64_t reading_ptr = writing_ptr;
+    int64_t end_of_reading = writing_ptr;
+
+    bool is_last_deleted = false;
+
+    uchar buffer[BUFFER_LENGTH] = {0};
+
+    int original_files_count = arc->archive_files_count;
+
+    for (int i = 0; i < original_files_count; ++i) {
+        fseeko64(arc->archive_stream, reading_ptr, SEEK_SET);
+        ArchiveFile info = get_file_info(arc->archive_stream, i);
+
+
+        if(dl_int_find(files_ids, i) != -1) {
+            reading_ptr += info.compressed_file_size;
+            end_of_reading = reading_ptr;
+            arc->archive_files_count--;
+
+            continue;
+        }
+        else{
+            end_of_reading = reading_ptr + info.compressed_file_size;
+        }
+
+        if(reading_ptr == writing_ptr){
+            // don't need to copy
+            writing_ptr += info.compressed_file_size;
+            reading_ptr = end_of_reading;
+        }
+
+        archive_file_free(&info);
+
+
+
+        while (reading_ptr != end_of_reading){
+            int64_t block_length = int64_min(BUFFER_LENGTH, end_of_reading - reading_ptr);
+            fseeko64(arc->archive_stream, reading_ptr, SEEK_SET);
+            u_assert(
+                    block_length ==
+                    fread(buffer, sizeof(uchar), block_length, arc->archive_stream)
+                    );
+            reading_ptr += block_length;
+
+            fseeko64(arc->archive_stream, writing_ptr, SEEK_SET);
+            u_assert(
+                    block_length ==
+                    fwrite(buffer, sizeof(uchar), block_length, arc->archive_stream)
+                    );
+            writing_ptr += block_length;
+
+        }
+
+    }
+
+    if(file_length(arc->archive_stream) == writing_ptr){
+        return;
+    }
+
+    trunc_file(arc->archive_stream, writing_ptr);
+    fclose(arc->archive_stream);// not working without this
+    arc->archive_stream = fopen64(arc->file_name.value, "rb+");
+    update_archive_header(arc);
+}
+
 void archive_free(Archive* arc){
 
+
+    if(arc->writing_file_stream == arc->archive_stream){
+        u_assert(trunc_file(arc->archive_stream, arc->last_safe_eof));
+        fclose(arc->archive_stream);
+        arc->archive_stream = fopen64(arc->file_name.value, "rb+");
+
+//        FILE* a = fopen("logs.txt", "w");
+//        fprintf(a, "{%d}\n", arc->archive_files_count);
+//        fclose(a);
+        update_archive_header(arc);
+    }
+    else if(arc->writing_file_stream != NULL){
+        // extracting file corrupted
+        fclose(arc->writing_file_stream);
+        u_assert(remove(arc->writing_file_name.value) == 0);
+    }
+}
+
+void archive_file_free(ArchiveFile* file){
+    str_free(file->file_name);
 }

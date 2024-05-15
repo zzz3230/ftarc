@@ -6,11 +6,13 @@
 #include "compression_algorithms/huffman.h"
 #include "pthread.h"
 #include "args_parser.h"
+#include "archiver.h"
+#include "progress_display.h"
+#include <signal.h>
 
 #define COLORER_IMPLEMENTATION
 #include "utilities/colorer.h"
-#include "archiver.h"
-#include "progress_display.h"
+
 
 typedef struct s_thread_args{
     StartupArgs args;
@@ -18,37 +20,14 @@ typedef struct s_thread_args{
 } ThreadArgs;
 
 
-void highlight_print(const char* message){
-    bool super_highlight = false;
-
-    for (int i = 0; message[i]; ++i) {
-        if(message[i] == '#'){
-            super_highlight = !super_highlight;
-            if(super_highlight){
-                color_fg(stdout, COLOR_BLACK);
-                color_bg(stdout, COLOR_BWHITE);
-            }
-            else{
-                color_bg(stdout, COLOR_BLACK);
-                color_reset(stdout);
-            }
-            continue;
-        }
-        if(message[i] == ']'){
-            color_reset(stdout);
-        }
-
-        putchar(message[i]);
-
-        if(message[i] == '['){
-            color_fg(stdout, COLOR_BYELLOW);
-        }
-    }
+void int_handler(int sig) {
+    // ctrl-c; stopping
+    throw(EXCEPTION_STOP_SIGNAL, "ctrl-c hit");
 }
 
 void print_help(){
     highlight_print("# FTARC 1.0 #\n\n");
-    highlight_print("$ ftarc -[axdltfnho] arc.f2a file1 file2 ...\n");
+    highlight_print("$ ftarc -[axdltfnho] arc.f2a [extract path] file1 file2 ...\n");
     highlight_print("[-a] append file to archive ([-ao] override archive)\n");
     highlight_print("[-x] extract files by ids [-xn] or names [-xf]; just [-x] extract ALL files\n");
     highlight_print("[-d] delete files by ids [-dn] or names [-df]\n");
@@ -57,8 +36,9 @@ void print_help(){
     highlight_print("[-h] this message\n\n");
 }
 
+
 void print_list(Archive* arc){
-    DynListArchiveFile* files = archive_get_files(arc);
+    DynListArchiveFile* files = archive_get_files(arc, -1);
 
     printf("ID   SIZE\t DATE\t\t\t RATIO \t\t NAME\n");
     printf("---- ----\t ----\t\t\t ----- \t\t ----\n");
@@ -85,6 +65,7 @@ void print_list(Archive* arc){
     printf("\n");
 }
 
+
 void* archive_work(void* th_args){
     StartupArgs args = ((ThreadArgs*)th_args)->args;
     Archive* arc = ((ThreadArgs*)th_args)->arc;
@@ -102,13 +83,15 @@ void* archive_work(void* th_args){
     else if(args.action & ARC_ACTION_EXTRACT){
         DynListInt* final_ids = args.numbers;
 
-        if(final_ids == NULL){
-            final_ids = dl_int_create(8);
-            DynListArchiveFile* arc_files = archive_get_files(arc);
-            for (int i = 0; i < arc_files->count; ++i) {
-                if(dl_str_contains(args.files, dl_arc_file_get(arc_files, i).file_name)){
-                    dl_int_append(final_ids, i);
-                }
+        if(final_ids == NULL && args.files != NULL){
+            // files by names
+            final_ids = get_files_ids_by_names(arc, args.files);
+        }
+        else{
+            // all files
+            final_ids = dl_int_create(arc->archive_files_count);
+            for (int i = 0; i < arc->archive_files_count; ++i) {
+                dl_int_append(final_ids, i);
             }
         }
 
@@ -124,6 +107,16 @@ void* archive_work(void* th_args){
         }
     }
 
+    else if(args.action & ARC_ACTION_DELETE){
+        DynListInt* final_ids = args.numbers;
+
+        if(final_ids == NULL && args.files != NULL){
+            // files by names
+            final_ids = get_files_ids_by_names(arc, args.files);
+        }
+        archive_remove_files(arc, final_ids);
+    }
+
     clock_t time_end = clock();
     double time_spent = (double)(time_end - time_begin) / CLOCKS_PER_SEC;
     arc->time_spent = time_spent;
@@ -132,6 +125,8 @@ void* archive_work(void* th_args){
 }
 
 int main(int argc, char *argv[]) {
+
+    signal(SIGINT, int_handler);
 
     color_init();
 
@@ -153,11 +148,11 @@ int main(int argc, char *argv[]) {
         arc = archive_open(args.archive_name, true);
     }
     if(args.action & ARC_ACTION_APPEND){
-        if(is_file_exists(args.archive_name.value)){
+        if((args.action & ARC_ACTION_OVERRIDE) == 0 && is_file_exists(args.archive_name.value)){
             arc = archive_open(args.archive_name, true);
         }
         else{
-            arc = archive_new(args.archive_name);
+            arc = archive_new(args.archive_name, args.action & ARC_ACTION_OVERRIDE);
         }
     }
 

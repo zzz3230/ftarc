@@ -12,7 +12,8 @@ typedef enum e_archive_action{
     ARC_ACTION_EXTRACT      = 1 << 6,
     ARC_ACTION_USE_NUMBERS  = 1 << 7,
     ARC_ACTION_USE_FILES    = 1 << 8,
-    ARC_ACTION_HELP         = 1 << 9
+    ARC_ACTION_HELP         = 1 << 9,
+    ARC_ACTION_OVERRIDE     = 1 << 10
 } ArchiveAction;
 
 typedef struct s_StartupArgs{
