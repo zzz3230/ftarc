@@ -24,7 +24,7 @@ void prefix##_append(name* list, type val){\
         list->arr = realloc(list->arr, list->capacity * sizeof(type) * 2);\
         list->capacity *= 2;\
         if(list->arr == NULL){\
-            u_assert(0 && "realloc failed");\
+            uf_assert(0 && "realloc failed");\
         }\
     }\
     list->arr[list->count] = val;\
@@ -32,13 +32,13 @@ void prefix##_append(name* list, type val){\
 }\
 type prefix##_get(name* list, int index){\
     if(index < 0 || index >= list->count){\
-        u_assert(0 && "index out of range");\
+        uf_assert(0 && "index out of range");\
     }\
     return list->arr[index];\
 }                                              \
 type* prefix##_get_ref(name* list, int index){\
     if(index < 0 || index >= list->count){\
-        u_assert(0 && "index out of range");\
+        uf_assert(0 && "index out of range");\
     }\
     return &list->arr[index];\
 }                                              \

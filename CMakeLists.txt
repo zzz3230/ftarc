@@ -39,4 +39,6 @@ add_executable(ftarc main.c
         args_parser.h
         progress_display.c
         progress_display.h
+        utilities/timings.h
+        utilities/timings.c
 )

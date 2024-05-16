@@ -8,6 +8,10 @@
 #include "compression_algorithms/huffman.h"
 #include "exceptions.h"
 
+
+
+
+
 // validate and skip sign
 bool validate_signature(FILE* file){
     char sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
@@ -22,8 +26,8 @@ void read_archive_header(Archive* arc){
         throw(EXCEPTION_NOT_AN_ARCHIVE, arc->file_name.value);
     }
 
-    u_assert(16 == fread(arc->archive_hash, sizeof(uint8_t), 16, arc->archive_stream));
-    u_assert(1 == fread(&arc->archive_files_count, sizeof(int), 1, arc->archive_stream));
+    ua_assert(16 == fread(arc->archive_hash, sizeof(uint8_t), 16, arc->archive_stream));
+    ua_assert(1 == fread(&arc->archive_files_count, sizeof(int), 1, arc->archive_stream));
 }
 
 Archive* archive_init(){
@@ -133,20 +137,26 @@ ArchiveFile get_file_info(FILE* stream, int file_id){
     ArchiveFile info = {0};
     //fseeko64(stream, sizeof(int64_t) + 16 + sizeof(time_t) + sizeof(int64_t), SEEK_CUR);
 
-    fread(&info.compressed_file_size, sizeof(int64_t), 1, stream);
-    fread(&info.file_hash, sizeof(uint8_t), 16, stream);
+    ua_assert(1 == fread(&info.compressed_file_size, sizeof(int64_t), 1, stream));
+    ua_assert(16 == fread(&info.file_hash, sizeof(uint8_t), 16, stream));
 
     short code_len;
     fread(&code_len, sizeof(short), 1, stream);
+
+    ua_assert(code_len >= 0 && code_len <= 320);
+
     fseeko64(stream, code_len, SEEK_CUR);
 
-    fread(&info.add_date, sizeof(time_t), 1, stream);
-    fread(&info.original_file_size, sizeof(int64_t), 1, stream);
+    ua_assert(1 == fread(&info.add_date, sizeof(time_t), 1, stream));
+    ua_assert(1 == fread(&info.original_file_size, sizeof(int64_t), 1, stream));
 
     short file_name_len;
-    fread(&file_name_len, sizeof(short), 1, stream);
+
+    ua_assert(1 == fread(&file_name_len, sizeof(short), 1, stream));
+    ua_assert(file_name_len > 0);
+
     Str name = str_empty(file_name_len);
-    fread(name.value, sizeof(char), file_name_len, stream);
+    ua_assert(file_name_len == fread(name.value, sizeof(char), file_name_len, stream));
 
     info.file_name = name;
     info.file_id = file_id;
@@ -172,10 +182,10 @@ void read_total_huffman_code(HuffmanCoder* coder, FILE* from, MD5Context* hash, 
 
         md5Update(hash, (uint8_t*) &code_len, 2);
         uint8_t buffer[320]; // huffman code always <= 319 bytes length
-        u_assert(code_len <= 320); // just in case lets u_assert it
+        ua_assert(code_len <= 320); // just in case lets u_assert it
 
         int did_read = (int)fread(buffer, sizeof(uint8_t), code_len, from);
-        u_assert(code_len == did_read);
+        ua_assert(code_len == did_read);
 
         md5Update(hash, buffer, code_len);
 
@@ -202,10 +212,10 @@ int write_total_huffman_code(HuffmanCoder* coder, FILE* out_file, MD5Context* ha
     if(hash != NULL){
         md5Update(hash, (uint8_t*) &code_len, 2);
         uint8_t buffer[320]; // huffman code always <= 319 bytes length
-        u_assert(code_len <= 320); // just in case lets u_assert it
+        ua_assert(code_len <= 320); // just in case lets u_assert it
 
         int did_read = (int)fread(buffer, sizeof(uint8_t), code_len, out_file);
-        u_assert(code_len == did_read);
+        uf_assert(code_len == did_read);
 
 
         md5Update(hash, buffer, code_len);
@@ -220,9 +230,6 @@ void archive_add_file(Archive* arc, Str file_name){
     dl_str_append(arc->included_files, file_name);
 }
 
-void handle_file(Archive* arc, HuffmanCoder* coder){
-
-}
 
 // return  written bytes count
 int make_and_write_block(
@@ -234,15 +241,16 @@ int make_and_write_block(
         int* out_processed_bytes,
         MD5Context* hash_ctx
         ){
+
+
     int bits_encoded = 0;
     int processed_bytes = 0;
 
     memset(buffer, 0, buffer_size);
 
-    //int cur = ftello64(to);
+    int64_t from_length = file_length(from);
 
     int stop_reason;
-
     huffman_encode_symbols(
             coder,
             from,
@@ -260,7 +268,7 @@ int make_and_write_block(
         // write original_size
         short short_proc_bytes = (short)processed_bytes;
         if(fwrite(&short_proc_bytes, sizeof(short), 1, to) != 1){
-            u_assert(0);
+            uf_assert(0);
         }
         // write padding_length
         short padding = (short)((buffer_size * 8 - bits_encoded));     // padding to byte:  aaa00000 00000000 00000000
@@ -268,7 +276,7 @@ int make_and_write_block(
                                                                         //                     this is padding
 
         if(fwrite(&padding, sizeof(short), 1, to) != 1){
-            u_assert(0);
+            uf_assert(0);
         }
 
         int bytes_count = bits_encoded / 8;
@@ -279,17 +287,22 @@ int make_and_write_block(
         //printf("Enc %ld %d\n", ftello64(to), bits_encoded);
 
         int to_write_length = buffer_size;
-        if(stop_reason == STOP_REASON_EOF){
+        if(stop_reason == STOP_REASON_EOF || ftello64(from) == from_length){
             to_write_length = bytes_count;
             //printf("EOF\n");
         }
 
         //printf("%d ", bytes_count);
+        //if(stop_reason != EOF)
         md5Update(hash_ctx, buffer, bytes_count);
+
+//        FILE* f = fopen64("log.txt", "rt+");
+//        fprintf(f, "%d\n", bytes_count);
+//        fclose(f);
 
         // write data
         int written = (int)fwrite(buffer, sizeof(char), to_write_length, to);
-        u_assert(written == to_write_length);
+        uf_assert(written == to_write_length);
 
 
         *out_processed_bytes = processed_bytes;
@@ -355,21 +368,12 @@ void make_and_write_file(
     }
 
 
-    //printf("[%lld]", length);
-
-    // move to end of last block,
-    // because make_and_write_block() fill remaining bytes with zero
-//    fseeko64(to, - (buffer_size - block_length), SEEK_CUR);
-//    length -= (buffer_size - block_length);
-
-
     int64_t file_end_pos = ftello64(to);
     fseeko64(to, start_pos, SEEK_SET);
 
     md5Update(&hash_ctx, (uint8_t*) &length, sizeof(int64_t));
     md5Finalize(&hash_ctx);
 
-    //print_hash(hash_ctx.digest);
     fwrite(&length, sizeof(int64_t), 1, to);
     fwrite(hash_ctx.digest, sizeof(uint8_t), 16, to); // save hash
     fseeko64(to, file_end_pos, SEEK_SET);
@@ -379,7 +383,6 @@ void make_and_write_file(
             file_hash[i] = hash_ctx.digest[i];
         }
     }
-    //arc->work_stage = WORK_NONE;
 }
 
 
@@ -398,11 +401,13 @@ void read_and_dec_block(
         bool is_last_block,
         bool hash_only
         ){
-    
+
+    ANY_TIMING_BEGIN
+
     short original_size;
     fread(&original_size, sizeof(short), 1, from);
 
-    u_assert(out_buffer_size >= original_size);
+    ua_assert(out_buffer_size >= original_size);
     
     short padding;
     fread(&padding, sizeof(short), 1, from);
@@ -412,6 +417,10 @@ void read_and_dec_block(
     fread(buffer, sizeof(char), count_to_read, from);
     int decoded_bytes = 0;
 
+    FILESYSTEM_TIMING_END
+    ANY_TIMING_BEGIN
+
+    //if(!is_last_block)
     md5Update(hash_ctx, buffer, block_length - padding / 8);
 
     if(!hash_only){
@@ -419,9 +428,10 @@ void read_and_dec_block(
 
         if(!any_exceptions()){
             int wrote = (int)fwrite(out_buffer, sizeof(char), decoded_bytes, to);
-            u_assert(decoded_bytes == wrote);
+            uf_assert(decoded_bytes == wrote);
         }
     }
+    PROCESSOR_TIMING_END
 }
 
 // if hash_only == true
@@ -463,10 +473,11 @@ void read_and_dec_file(
 
     short name_length;
     fread(&name_length, sizeof(short), 1, from);
+    ua_assert(name_length > 0);
     md5Update(&hash_ctx, (uint8_t*)&name_length, sizeof(name_length));
 
     char* name = malloc(name_length);
-    u_assert(name);
+    uf_assert(name);
     fread(name, sizeof(char), name_length, from);
     md5Update(&hash_ctx, (uint8_t*)name, name_length);
     free(name);
@@ -642,7 +653,7 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
     fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed);
-    u_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
+    ua_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
     fread(saved_hash, sizeof(uint8_t), 16, compressed);
@@ -719,12 +730,12 @@ DynListArchiveFile* archive_get_files(Archive* arc, int max_files){
     FILE* compressed = arc->archive_stream;
 
     char file_sign[sizeof(ARCHIVE_FILE_BEGIN)] = {0};
-    u_assert(
+    ua_assert(
             sizeof(ARCHIVE_FILE_BEGIN) - 1 ==
             fread(file_sign, sizeof(char), sizeof(ARCHIVE_FILE_BEGIN) - 1, compressed)
             );
 
-    u_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
+    ua_assert(strcmp(file_sign, ARCHIVE_FILE_BEGIN) == 0);
 
     uint8_t saved_hash[16];
     fread(saved_hash, sizeof(uint8_t), 16, compressed);
@@ -809,7 +820,6 @@ void archive_remove_files(Archive* arc, DynListInt* files_ids){
     int64_t reading_ptr = writing_ptr;
     int64_t end_of_reading = writing_ptr;
 
-    bool is_last_deleted = false;
 
     uchar buffer[BUFFER_LENGTH] = {0};
 
@@ -844,14 +854,14 @@ void archive_remove_files(Archive* arc, DynListInt* files_ids){
         while (reading_ptr != end_of_reading){
             int64_t block_length = int64_min(BUFFER_LENGTH, end_of_reading - reading_ptr);
             fseeko64(arc->archive_stream, reading_ptr, SEEK_SET);
-            u_assert(
+            ua_assert(
                     block_length ==
                     fread(buffer, sizeof(uchar), block_length, arc->archive_stream)
                     );
             reading_ptr += block_length;
 
             fseeko64(arc->archive_stream, writing_ptr, SEEK_SET);
-            u_assert(
+            uf_assert(
                     block_length ==
                     fwrite(buffer, sizeof(uchar), block_length, arc->archive_stream)
                     );
@@ -875,19 +885,16 @@ void archive_free(Archive* arc){
 
 
     if(arc->writing_file_stream == arc->archive_stream){
-        u_assert(trunc_file(arc->archive_stream, arc->last_safe_eof));
+        uf_assert(trunc_file(arc->archive_stream, arc->last_safe_eof));
         fclose(arc->archive_stream);
         arc->archive_stream = fopen64(arc->file_name.value, "rb+");
 
-//        FILE* a = fopen("logs.txt", "w");
-//        fprintf(a, "{%d}\n", arc->archive_files_count);
-//        fclose(a);
         update_archive_header(arc);
     }
     else if(arc->writing_file_stream != NULL){
         // extracting file corrupted
         fclose(arc->writing_file_stream);
-        u_assert(remove(arc->writing_file_name.value) == 0);
+        uf_assert(remove(arc->writing_file_name.value) == 0);
     }
 }
 

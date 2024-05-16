@@ -13,7 +13,7 @@ int str_comparator(Str a, Str b){
 }
 
 int arcfile_comparator(ArchiveFile a, ArchiveFile b){
-    u_assert(0 && "not implemented");
+    uf_assert(0 && "not implemented");
 }
 
 DYN_LIST_IMPL_GENERATOR(Str, DynListStr, dl_str, str_comparator);

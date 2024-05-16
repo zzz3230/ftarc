@@ -3,13 +3,22 @@
 
 #include <stdio.h>
 #include "archive_structs.h"
+#include "utilities/colorer.h"
+#include <stdlib.h>
 
 #ifdef DEBUG
     #define u_assert(_Expression)\
  ((!!(_Expression)) || \
   (_assert(#_Expression,__FILE__,__LINE__),0))
+#define ua_assert(_Expression)\
+ ((!!(_Expression)) || \
+  (_assert(#_Expression,__FILE__,__LINE__),0))
+#define uf_assert(_Expression)\
+ ((!!(_Expression)) || \
+  (_assert(#_Expression,__FILE__,__LINE__),0))
 #else
-    #define u_assert(exp) if(!(exp)) throw(EXCEPTION_UNKNOWN, #exp);
+    #define uf_assert(exp) if(!(exp)) throw(EXCEPTION_FATAL_ERROR, #exp);
+    #define ua_assert(exp) if(!(exp)) throw(EXCEPTION_ARCHIVE_IS_CORRUPTED, #exp);
 #endif
 
 enum e_exception_code {

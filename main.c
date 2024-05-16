@@ -40,8 +40,45 @@ void print_help(){
 void print_list(Archive* arc){
     DynListArchiveFile* files = archive_get_files(arc, -1);
 
+    double archive_length = 0;
+    double original_length = 0;
+    for (int i = 0; i < files->count; ++i) {
+        ArchiveFile info = dl_arc_file_get(files, i);
+        archive_length += (double)info.compressed_file_size;
+        original_length += (double)info.original_file_size;
+    }
+
+    printf("Archive: [");
+
+    color_fg(stdout, COLOR_BYELLOW);
+    printf("%s", arc->file_name.value);
+    color_reset(stdout);
+
+    printf("] ");
+
+    char arc_str[256];
+    pretty_bytes(arc_str, (int64_t)archive_length);
+    color_fg(stdout, COLOR_BGREEN);
+    printf("%s", arc_str);
+    color_reset(stdout);
+
+    printf(" / ");
+
+    pretty_bytes(arc_str, (int64_t)original_length);
+    color_fg(stdout, COLOR_BGREEN);
+    printf("%s", arc_str);
+    color_reset(stdout);
+
+
+    color_fg(stdout, COLOR_BCYAN);
+    printf("   %.2lf%%\n\n", archive_length / original_length * 100);
+    color_reset(stdout);
+
+
     printf("ID   SIZE\t DATE\t\t\t RATIO \t\t NAME\n");
     printf("---- ----\t ----\t\t\t ----- \t\t ----\n");
+
+    color_reset(stdout);
 
     for (int i = 0; i < files->count; ++i) {
         ArchiveFile info = dl_arc_file_get(files, i);
@@ -53,13 +90,16 @@ void print_list(Archive* arc){
         char date_str[20];
         strftime(date_str, sizeof(date_str), "%x %H:%M", date);
 
-        printf("[%d]  %s\t %s \t %.2lf%% \t %s\n",
-               info.file_id,
-               file_size_str,
-               date_str,
-               (double)info.compressed_file_size / (double)info.original_file_size * 100,
-               info.file_name.value
-        );
+        printf("[%d]  ", info.file_id);
+        color_fg(stdout, COLOR_BGREEN);
+        printf("%s\t ", file_size_str);
+        color_reset(stdout);
+        printf("%s \t ", date_str);
+        color_fg(stdout, COLOR_BCYAN);
+        printf("%.2lf%% \t ", (double)info.compressed_file_size / (double)info.original_file_size * 100);
+        color_fg(stdout, COLOR_BYELLOW);
+        printf("%s\n", info.file_name.value);
+        color_reset(stdout);
     }
 
     printf("\n");
@@ -87,7 +127,7 @@ void* archive_work(void* th_args){
             // files by names
             final_ids = get_files_ids_by_names(arc, args.files);
         }
-        else{
+        if(final_ids == NULL && args.files == NULL){
             // all files
             final_ids = dl_int_create(arc->archive_files_count);
             for (int i = 0; i < arc->archive_files_count; ++i) {

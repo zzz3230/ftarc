@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "../utilities/heap.h"
 #include "../utilities/utils.h"
+#include "../utilities/timings.h"
 
 
 #define HUFF_ALPHA_LEN 256

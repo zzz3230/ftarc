@@ -7,10 +7,13 @@
 #include "stdbool.h"
 #include "utilities/md5.h"
 #include "utilities/collections.h"
+#include "utilities/timings.h"
 
 #define ARCHIVE_FILE_EXTENSION ".f2a"
 #define ARCHIVE_FILE_BEGIN "\002ftarc"
 #define BUFFER_LENGTH 4096
+
+
 
 Archive* archive_open(Str file_name, bool write_mode);
 Archive* archive_new(Str file_name, bool override);

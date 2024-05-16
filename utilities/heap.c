@@ -20,7 +20,7 @@ void swap_heap_type(HEAP_TYPE* a, HEAP_TYPE* b){
 
 Heap* heap_create(int size){
     Heap* h = calloc(1, sizeof(Heap));
-    u_assert(h);
+    uf_assert(h);
     h->arr = calloc(size, sizeof(HEAP_TYPE));
     h->size = size;
     return h;
@@ -53,7 +53,7 @@ void heap_siftdown(Heap* h, int i){
 
 void heap_push(Heap* h, HEAP_TYPE n){
     if(h->length >= h->size) {
-        u_assert(0 && "heap is full");
+        uf_assert(0 && "heap is full");
     }
     h->arr[h->length] = n;
     h->length++;

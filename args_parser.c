@@ -84,7 +84,7 @@ StartupArgs parse_args(int argc, char *argv[]){
     }
 
     if(args.action & ARC_ACTION_UNKNOWN){
-        u_assert(0);
+        uf_assert(0);
     }
 
     if(is_conflict(args.action)){
@@ -140,7 +140,7 @@ StartupArgs parse_args(int argc, char *argv[]){
                 dl_int_append(args.numbers, value);
             }
             else{
-                u_assert(0);
+                uf_assert(0);
             }
         }
     }

@@ -142,5 +142,11 @@ void display_progress(Archive* arc){
 
     color_fg(stdout, COLOR_BYELLOW);
     printf("\rTime spent: %.3lf sec\n\n", arc->time_spent);
+
+#if EXTENDED_TIMING
+    printf("Filesystem time: %.6lf sec\n", filesystem_time / CLOCKS_PER_SEC);
+    printf("Processor time: %.6lf sec\n", processor_time / CLOCKS_PER_SEC);
+#endif
+
     color_reset(stdout);
 }
