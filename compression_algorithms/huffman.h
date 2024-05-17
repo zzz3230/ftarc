@@ -19,8 +19,8 @@
 #define STOP_REASON_EOB 2
 
 typedef struct s_huffman_code{
-    int length;
-    char code[HUFF_CODE_MAX_LENGTH];
+    uint64_t length;
+    uint64_t code;
 } HuffmanCode;
 
 typedef struct s_huffman_coder{

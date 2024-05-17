@@ -242,6 +242,7 @@ int make_and_write_block(
         MD5Context* hash_ctx
         ){
 
+ANY_TIMING_BEGIN
 
     int bits_encoded = 0;
     int processed_bytes = 0;
@@ -261,9 +262,13 @@ int make_and_write_block(
             &stop_reason
             );
 
+PROCESSOR_TIMING_END
+
     if(bits_encoded > 0){
         if(any_exceptions())
             return 0;
+
+ANY_TIMING_BEGIN
 
         // write original_size
         short short_proc_bytes = (short)processed_bytes;
@@ -304,6 +309,7 @@ int make_and_write_block(
         int written = (int)fwrite(buffer, sizeof(char), to_write_length, to);
         uf_assert(written == to_write_length);
 
+FILESYSTEM_TIMING_END
 
         *out_processed_bytes = processed_bytes;
         return to_write_length + (int)(sizeof(short) + sizeof(short));
@@ -565,7 +571,15 @@ void archive_save(Archive* arc){
 
     uint8_t file_hash[16];
 
-    uchar buffer[BUFFER_LENGTH] = {0};
+//    uint64_t _buffer64[BUFFER_LENGTH / 8] = {0};
+//    uchar* buffer = (uchar*)_buffer64;
+
+    //uchar buffers[2][BUFFER_LENGTH] = {0};
+
+    uchar** buffers = calloc(3, sizeof(uchar*));
+    for (int i = 0; i < 3; ++i) {
+        buffers[i] = calloc(BUFFER_LENGTH, sizeof(uchar));
+    }
 
     for (int i = 0; i < arc->archive_files_count; ++i) {
         ArchiveFile info = get_file_info(out_file, i);
@@ -596,17 +610,31 @@ void archive_save(Archive* arc){
 
         Str in_archive_file_name = str(get_file_name_from_path(file_to_compress.value));
 
+
         // COMPRESSING & WRITING FILE
-        make_and_write_file(
+//        make_and_write_file(
+//                arc,
+//                coder,
+//                file,
+//                out_file,
+//                in_archive_file_name,
+//                buffer,
+//                BUFFER_LENGTH,
+//                file_hash
+//                );
+
+        make_and_write_file__multithread(
                 arc,
                 coder,
                 file,
                 out_file,
                 in_archive_file_name,
-                buffer,
+                buffers,
                 BUFFER_LENGTH,
+                3,
                 file_hash
                 );
+
         fclose(file);
 
         if(any_exceptions()){

@@ -11,6 +11,15 @@
 #include "../exceptions.h"
 
 
+// str_interp must contain '0' or '1' chars
+// will set .code and .length
+void set_code(HuffmanCode* code, const char* str_interp, int length){
+    code->length = length;
+    for (int i = 0; i < length; ++i) {
+        code->code |= (str_interp[i] == '1') << i;
+    }
+}
+
 Node* l_build_tree(HuffmanCoder* coder) {
     uf_assert(coder->intermediate_nodes == NULL);
 
@@ -47,12 +56,9 @@ Node* l_build_tree(HuffmanCoder* coder) {
 void l_get_code_rec(HuffmanCode* codes, Node* current, char* way, int way_i){
     if(current->value != -1){
         if(way_i != 0){
-            //printf("> %d %s\n", current->value, way);
-            strcpy(codes[current->value].code, way);
-            codes[current->value].length = way_i;
+            set_code(&codes[current->value], way, way_i);
         }
         else{
-            codes[current->value].code[0] = '0';
             codes[current->value].length = 1;
         }
     }
@@ -252,12 +258,44 @@ int64_t huffman_save_codes(HuffmanCoder* coder, FILE* stream){
 }
 
 HuffmanCode huffman_encode_symbol(HuffmanCoder* coder, uchar symbol){
-    uf_assert(coder->codes);
+    //uf_assert(coder->codes);
     return coder->codes[symbol];
 }
 
+// out_ptr: index in output
+// ptr: index in output[out_ptr]
+// return -1 if output is over
+static inline int append_code(
+        uint64_t* output,
+        int output_len,
+        int* out_ptr,
+        uint64_t* ptr,
+        uint64_t* encoded_bits,
+        HuffmanCode code
+        ){
+    output[*out_ptr] |= code.code << *ptr;
+    *ptr += code.length;
+    *encoded_bits += code.length;
+    if(*ptr >= 64){
+        (*out_ptr)++;
+        uint64_t offset = 64 - (*ptr - code.length); // ...000000abc defgh000...; offset = len(abc)
+
+        if(*out_ptr == output_len){
+            output[*out_ptr-1] &= ((1ull << (64ull - offset)) - 1ull); // remove unnecessary bits (last offset bits)
+                                                            // ((1 << (64- offset)) - 1) ==> ...11111111 11100000; count(0) == offset
+            *encoded_bits -= code.length;
+            return -1;
+        }
+
+        output[*out_ptr] |= code.code >> offset;
+        *ptr = code.length - offset;
+    }
+    return 0;
+}
+
+
 // encode max possible bytes from stream to get bits <= out_buffer_len * 8
-// out_buffer_len : bytes count
+// out_buffer_len : bytes count; must out_buffer_len % sizeof(uint64_t) == 0
 // out_bit_len : bits count
 // out_buffer must be clear
 void huffman_encode_symbols(
@@ -269,17 +307,21 @@ void huffman_encode_symbols(
         int* out_processed_bytes,
         int* stop_reason
         ){
-    int encoded_bits = 0;
+    uint64_t encoded_bits = 0;
     int buffer_remain = 0;
     int in_buffer_index = 0;
     int processed_bytes = 0;
 
     *stop_reason = 0;
 
+    int out_ptr = 0;
+    uint64_t ptr = 0;
+    int output_len = out_buffer_len / (int)sizeof(uint64_t);
+
     while (encoded_bits <= out_buffer_len * 8){
         if(buffer_remain == 0){
 
-            ANY_TIMING_BEGIN
+            //ANY_TIMING_BEGIN
 
             in_buffer_index = 0;
             buffer_remain =
@@ -291,7 +333,7 @@ void huffman_encode_symbols(
                             );
             processed_bytes += buffer_remain;
 
-            FILESYSTEM_TIMING_END
+            //FILESYSTEM_TIMING_END
 
             if(buffer_remain == 0){
                 *stop_reason = STOP_REASON_EOF;
@@ -299,29 +341,34 @@ void huffman_encode_symbols(
             }
         }
 
-        ANY_TIMING_BEGIN
+        //ANY_TIMING_BEGIN
         HuffmanCode code = huffman_encode_symbol(coder, coder->_read_buffer[in_buffer_index++]);
 
-        bool is_stop = false;
-        for (int i = 0; i < code.length; ++i) {
-            out_buffer[encoded_bits / 8] |= (uchar)((code.code[i] == '1') << (encoded_bits % 8)); // TODO remake
-            encoded_bits++;
-            if(encoded_bits == out_buffer_len * 8){
-                if(i < code.length - 1){ // need at lest one bit more
-                    encoded_bits -= i + 1; // do not take into account the already recorded bits
-                }
-                else{
-                    buffer_remain--; // full byte was used
-                }
-                is_stop = true;
-                break;
-            }
-        }
-        PROCESSOR_TIMING_END
-
-        if(is_stop){
+        int res = append_code((uint64_t*)out_buffer, output_len, &out_ptr, &ptr, &encoded_bits, code);
+        if(res == -1){
             break;
         }
+//
+//        bool is_stop = false;
+//        for (int i = 0; i < code.length; ++i) {
+//            out_buffer[encoded_bits / 8] |= (uchar)((code.code[i] == '1') << (encoded_bits % 8)); // TODO remake
+//            encoded_bits++;
+//            if(encoded_bits == out_buffer_len * 8){
+//                if(i < code.length - 1){ // need at lest one bit more
+//                    encoded_bits -= i + 1; // do not take into account the already recorded bits
+//                }
+//                else{
+//                    buffer_remain--; // full byte was used
+//                }
+//                is_stop = true;
+//                break;
+//            }
+//        }
+        //PROCESSOR_TIMING_END
+//
+//        if(is_stop){
+//            break;
+//        }
 
         buffer_remain--;
     }
@@ -336,7 +383,7 @@ void huffman_encode_symbols(
     }
 
     *out_processed_bytes = processed_bytes;
-    *out_bit_len = encoded_bits;
+    *out_bit_len = (int)encoded_bits;
 }
 void huffman_decode_symbols(
         HuffmanCoder* coder,

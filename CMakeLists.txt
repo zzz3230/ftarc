@@ -41,4 +41,6 @@ add_executable(ftarc main.c
         progress_display.h
         utilities/timings.h
         utilities/timings.c
+        archiver_multithread.c
+        archiver_multithread.h
 )

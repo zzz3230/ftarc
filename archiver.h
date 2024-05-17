@@ -8,6 +8,7 @@
 #include "utilities/md5.h"
 #include "utilities/collections.h"
 #include "utilities/timings.h"
+#include "archiver_multithread.h"
 
 #define ARCHIVE_FILE_EXTENSION ".f2a"
 #define ARCHIVE_FILE_BEGIN "\002ftarc"
