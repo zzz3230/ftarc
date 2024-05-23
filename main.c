@@ -165,6 +165,7 @@ void* archive_work(void* th_args){
 }
 
 int main(int argc, char *argv[]) {
+    setlocale(LC_ALL, "en_us.utf8");
 
     signal(SIGINT, int_handler);
 

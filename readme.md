@@ -1,6 +1,5 @@
 
 # F2ARC Archiver
-<img src="https://github.com/zzz3230/ftarc/blob/master/f2arc_poster.png?raw=true">
 
 Based on Huffman algorithm.
 
@@ -48,5 +47,5 @@ bool archive_validate(Archive* arc);
 ```
 
 ## Archive structure
-<img src="https://imgbly.com/ib/vP4P5BN1rP.png">
+<img src="https://github.com/zzz3230/ftarc/blob/master/f2arc_architect.png?raw=true">
 

@@ -423,21 +423,25 @@ void read_and_dec_block(
     fread(buffer, sizeof(char), count_to_read, from);
     int decoded_bytes = 0;
 
-    FILESYSTEM_TIMING_END
-    ANY_TIMING_BEGIN
 
     //if(!is_last_block)
     md5Update(hash_ctx, buffer, block_length - padding / 8);
 
     if(!hash_only){
         huffman_decode_symbols(coder, buffer, block_length * 8 - padding, out_buffer, &decoded_bytes);
+        PROCESSOR_TIMING_END
+
+        ANY_TIMING_BEGIN
 
         if(!any_exceptions()){
             int wrote = (int)fwrite(out_buffer, sizeof(char), decoded_bytes, to);
             uf_assert(decoded_bytes == wrote);
         }
+        FILESYSTEM_TIMING_END
+
+    }else{
+        PROCESSOR_TIMING_END
     }
-    PROCESSOR_TIMING_END
 }
 
 // if hash_only == true
@@ -726,18 +730,28 @@ void archive_extract(Archive* arc, Str out_path, DynListInt* files_ids){
                 break;
 
             huffman_clear(coder);
-            read_and_dec_file(
+
+            read_and_dec_file__multithread(
                     arc,
                     coder,
                     compressed,
                     decompressed,
-                    buffer,
                     BUFFER_LENGTH,
-                    out_buffer,
-                    BUFFER_LENGTH*8,
-                    NULL,
-                    false
+                    NULL
                     );
+
+//            read_and_dec_file(
+//                    arc,
+//                    coder,
+//                    compressed,
+//                    decompressed,
+//                    buffer,
+//                    BUFFER_LENGTH,
+//                    out_buffer,
+//                    BUFFER_LENGTH*8,
+//                    NULL,
+//                    false
+//                    );
 
             fclose(decompressed);
             arc->writing_file_stream = NULL;

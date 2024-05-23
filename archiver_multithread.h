@@ -20,5 +20,13 @@ void make_and_write_file__multithread(
         int buffets_count,
         uint8_t* file_hash
 );
+void read_and_dec_file__multithread(
+        Archive* arc,
+        HuffmanCoder* coder,
+        FILE* from,
+        FILE* to,
+        int buffer_size,
+        uint8_t* file_hash
+);
 
 #endif //FTARC_ARCHIVER_MULTITHREAD_H
